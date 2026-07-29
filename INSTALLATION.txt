@@ -25,34 +25,20 @@ cd Bookit
 
 
 ------------------------------------------------------------
-Step 3 – Create your secrets file
+Step 3 – Edit your secrets file
 ------------------------------------------------------------
 
-Create a file called .env.docker in the project folder:
+A pre-configured .env.docker file is included in the repo.
+Open it and fill in your values:
 
   nano .env.docker
 
-Add the following, filling in your real values:
-
-  # Required
-  JWT_SECRET=<a long random string — 48+ characters>
-
-  # Email notifications (remove or leave blank to disable)
-  SMTP_HOST=smtp.gmail.com
-  SMTP_PORT=587
-  SMTP_SECURE=false
-  SMTP_USER=you@gmail.com
-  SMTP_PASS=your_app_password
-  SMTP_FROM_EMAIL=you@gmail.com
-  SMTP_FROM_NAME=BookIt
-
-  # SMS notifications via Twilio (remove or leave blank to disable)
-  TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  TWILIO_AUTH_TOKEN=your_twilio_auth_token
-  TWILIO_PHONE_NUMBER=+15551234567
-
-To generate a strong JWT_SECRET, run:
+The only required change is JWT_SECRET. To generate one:
   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+Fill in SMTP_* fields to enable email notifications.
+Fill in TWILIO_* fields to enable SMS notifications.
+Leave either section as-is to disable those features.
 
 
 ------------------------------------------------------------

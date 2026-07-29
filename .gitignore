@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+# .env.docker is intentionally tracked (contains only placeholders)
 
 # Dependencies
 node_modules/

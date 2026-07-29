@@ -830,15 +830,18 @@ router.post('/auth/ldap-test', requireAdmin, ah(async (req, res) => {
   if (!url || !bind_dn || !base_dn)
     return res.status(400).json({ error: 'url, bind_dn, and base_dn are required' });
 
+  const ip = getClientIP(req);
   const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 8000 });
   try {
     await new Promise((resolve, reject) => {
       client.bind(bind_dn, bind_pass || '', err => (err ? reject(err) : resolve()));
     });
     client.unbind();
+    logLdapEvent('success', null, `Admin connection test passed (url=${url} dn=${bind_dn})`, ip);
     res.json({ ok: true, message: 'Connection and bind successful.' });
   } catch (err) {
     try { client.unbind(); } catch {}
+    logLdapEvent('bind_failed', null, `Admin connection test failed (url=${url} dn=${bind_dn}): ${err.message}`, ip);
     res.status(400).json({ error: err.message || 'LDAP bind failed.' });
   }
 }));

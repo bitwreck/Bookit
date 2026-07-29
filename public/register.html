@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Create Account – BookIt</title>
+<style>
+:root {
+  --bg:         #f8fafc;
+  --surface:    #ffffff;
+  --surface2:   #f1f5f9;
+  --border:     #e2e8f0;
+  --text:       #0f172a;
+  --text-muted: #64748b;
+  --accent:     #475569;
+  --danger:     #ef4444;
+  --radius:     10px;
+  --shadow-lg:  0 10px 40px rgba(0,0,0,.12);
+}
+[data-theme="dark"] {
+  --bg:         #0f172a;
+  --surface:    #1e293b;
+  --surface2:   #334155;
+  --border:     #334155;
+  --text:       #f1f5f9;
+  --text-muted: #94a3b8;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  transition: background .2s, color .2s;
+}
+
+.box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: var(--shadow-lg);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-weight: 800;
+  font-size: 1.15rem;
+  margin-bottom: 1.75rem;
+  letter-spacing: -.02em;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  background: var(--text);
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--surface);
+  flex-shrink: 0;
+}
+
+h1 { font-size: 1.4rem; font-weight: 800; margin-bottom: .35rem; }
+.subtitle { color: var(--text-muted); font-size: .875rem; margin-bottom: 1.75rem; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
+.form-group { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
+label { font-size: .82rem; font-weight: 600; color: var(--text-muted); }
+.form-control {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .6rem .85rem;
+  font-size: .9rem;
+  transition: border-color .15s, box-shadow .15s;
+  font-family: inherit;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(71,85,105,.15);
+}
+.form-control::placeholder { color: var(--text-muted); opacity: .7; }
+
+.optional-tag {
+  font-size: .72rem; font-weight: 400;
+  color: var(--text-muted); margin-left: .35rem;
+}
+
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: .4rem;
+  width: 100%; padding: .65rem 1rem;
+  border-radius: 8px; border: none;
+  font-size: .9rem; font-weight: 700;
+  cursor: pointer; transition: opacity .15s;
+  font-family: inherit;
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-primary { background: var(--text); color: var(--surface); }
+.btn-primary:hover:not(:disabled) { opacity: .85; }
+
+.error-box {
+  background: #fee2e2; color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: .65rem .85rem;
+  font-size: .85rem;
+  margin-bottom: 1rem;
+  display: none;
+}
+[data-theme="dark"] .error-box { background: rgba(185,28,28,.15); border-color: rgba(185,28,28,.3); color: #f87171; }
+
+.divider {
+  border: none; border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+.signin-link {
+  text-align: center;
+  font-size: .85rem;
+  color: var(--text-muted);
+}
+.signin-link a {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.signin-link a:hover { text-decoration: underline; }
+
+.theme-btn {
+  position: fixed; top: 1rem; right: 1rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; width: 36px; height: 36px;
+  display: grid; place-items: center;
+  cursor: pointer; color: var(--text-muted);
+  transition: background .15s;
+}
+.theme-btn:hover { background: var(--surface2); color: var(--text); }
+
+.phone-hint {
+  font-size: .75rem; color: var(--text-muted); margin-top: .2rem;
+}
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<!-- Theme toggle -->
+<button class="theme-btn" id="themeBtn" title="Toggle theme">
+  <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+</button>
+
+<div class="box">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    </div>
+    BookIt
+  </div>
+
+  <h1>Create your account</h1>
+  <p class="subtitle">Book and manage resource reservations.</p>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <form id="regForm" novalidate>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="firstName">First Name *</label>
+        <input class="form-control" type="text" id="firstName"
+               placeholder="Jane" autocomplete="given-name" required />
+      </div>
+      <div class="form-group">
+        <label for="lastName">Last Name *</label>
+        <input class="form-control" type="text" id="lastName"
+               placeholder="Smith" autocomplete="family-name" required />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="regEmail">Email Address *</label>
+      <input class="form-control" type="email" id="regEmail"
+             placeholder="jane@example.com" autocomplete="email" required />
+    </div>
+
+    <div class="form-group">
+      <label for="regPhone">
+        Phone
+        <span class="optional-tag">optional · used for SMS cancellation codes</span>
+      </label>
+      <input class="form-control" type="tel" id="regPhone"
+             placeholder="+1 555 000 0000" autocomplete="tel" />
+      <div class="phone-hint">Include country code for SMS (e.g. +1 for US/Canada)</div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" id="submitBtn">
+      Create Account
+    </button>
+  </form>
+
+  <hr class="divider" />
+
+  <p class="signin-link">
+    Already have an account?
+    <a href="/" id="signinLink">Sign in →</a>
+  </p>
+</div>
+
+<script>
+const API = '/api';
+
+// ── Theme ──────────────────────────────────────────────────
+const html = document.documentElement;
+const MOON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+const SUN  = document.getElementById('themeIcon').outerHTML;
+
+function applyTheme(t) {
+  html.dataset.theme = t;
+  document.getElementById('themeBtn').innerHTML = t === 'dark' ? MOON : SUN;
+  localStorage.setItem('bt-theme', t);
+}
+document.getElementById('themeBtn').addEventListener('click', () =>
+  applyTheme(html.dataset.theme === 'dark' ? 'light' : 'dark')
+);
+applyTheme(localStorage.getItem('bt-theme') || 'light');
+
+// ── Redirect if already logged in ─────────────────────────
+const existingToken = localStorage.getItem('bt-user-token');
+if (existingToken) {
+  try {
+    const payload = JSON.parse(atob(existingToken.split('.')[1]));
+    if (payload.type === 'user' && payload.exp * 1000 > Date.now()) {
+      window.location.href = '/';
+    }
+  } catch { localStorage.removeItem('bt-user-token'); }
+}
+
+// ── Registration form ──────────────────────────────────────
+const errorBox = document.getElementById('errorBox');
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.style.display = 'block';
+}
+function clearError() {
+  errorBox.style.display = 'none';
+}
+
+document.getElementById('regForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError();
+
+  const first_name = document.getElementById('firstName').value.trim();
+  const last_name  = document.getElementById('lastName').value.trim();
+  const email      = document.getElementById('regEmail').value.trim();
+  const phone      = document.getElementById('regPhone').value.trim();
+
+  if (!first_name) return showError('First name is required.');
+  if (!last_name)  return showError('Last name is required.');
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return showError('A valid email address is required.');
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Creating account…';
+
+  try {
+    const res = await fetch(API + '/auth/register', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ first_name, last_name, email, phone: phone || undefined, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+    });
+
+    const ct   = res.headers.get('content-type') || '';
+    const data = ct.includes('application/json') ? await res.json() : { error: 'Server error' };
+
+    if (!res.ok) {
+      // If account already exists, offer to sign in
+      if (res.status === 409) {
+        showError(data.error + ' ');
+        const link = document.createElement('a');
+        link.href = '/';
+        link.textContent = 'Sign in →';
+        link.style.fontWeight = '600';
+        errorBox.appendChild(link);
+        return;
+      }
+      throw new Error(data.error || 'Registration failed');
+    }
+
+    // Save token and redirect
+    localStorage.setItem('bt-user-token', data.token);
+    localStorage.setItem('bt-user', JSON.stringify(data.user));
+    window.location.href = '/';
+
+  } catch (err) {
+    showError(err.message || 'Something went wrong. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Create Account';
+  }
+});
+</script>
+</body>
+</html>

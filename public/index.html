@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Resource Booking</title>
+
+<!-- FullCalendar v6 + Luxon timezone adapter -->
+<link  href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/luxon3@6.1.11/index.global.min.js"></script>
+
+<!-- Lucide icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+<style>
+/* ── CSS Custom Properties ─────────────────────────────── */
+:root {
+  --bg:          #f8fafc;
+  --surface:     #ffffff;
+  --surface2:    #f1f5f9;
+  --border:      #e2e8f0;
+  --text:        #0f172a;
+  --text-muted:  #64748b;
+  --accent:      #475569;
+  --accent-fg:   #ffffff;
+  --radius:      10px;
+  --shadow:      0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg:   0 10px 40px rgba(0,0,0,.12);
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--surface);
+  --fc-neutral-bg-color: var(--surface2);
+  --fc-list-event-hover-bg-color: var(--surface2);
+  --fc-today-bg-color: rgba(71,85,105,.06);
+  --fc-event-text-color: #fff;
+}
+[data-theme="dark"] {
+  --bg:         #0f172a;
+  --surface:    #1e293b;
+  --surface2:   #334155;
+  --border:     #334155;
+  --text:       #f1f5f9;
+  --text-muted: #94a3b8;
+  --accent:     #94a3b8;
+  --accent-fg:  #0f172a;
+  --fc-today-bg-color: rgba(148,163,184,.08);
+}
+
+/* ── Reset & Base ──────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background .2s, color .2s;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ── Layout ────────────────────────────────────────────── */
+.app-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow);
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -.02em;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--text);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--surface);
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.main-layout {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 4rem;
+  display: grid;
+  grid-template-columns: 240px 1fr 220px;
+  gap: 1.5rem;
+}
+@media (max-width: 1100px) {
+  .main-layout { grid-template-columns: 220px 1fr; }
+  .right-panel { display: none; }
+}
+@media (max-width: 900px) {
+  .main-layout { grid-template-columns: 1fr; }
+  .sidebar { order: -1; }
+  .right-panel { display: none; }
+}
+
+/* ── Sidebar & right panel ─────────────────────────────── */
+.sidebar, .right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.card-title {
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: .85rem;
+}
+
+/* Resource filter list */
+.resource-list { list-style: none; display: flex; flex-direction: column; gap: .35rem; }
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .45rem .6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: .9rem;
+  transition: background .15s;
+}
+.resource-item:hover { background: var(--surface2); }
+.resource-item.active { background: var(--surface2); font-weight: 600; }
+.resource-dot {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Top-users leaderboard */
+.top-user-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .8rem;
+  padding: .25rem 0;
+}
+.top-user-rank {
+  width: 18px;
+  text-align: right;
+  font-size: .72rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.top-user-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.top-user-hours {
+  font-size: .75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.top-user-bar-wrap {
+  width: 100%;
+  background: var(--surface2);
+  border-radius: 99px;
+  height: 4px;
+  margin-top: .15rem;
+}
+.top-user-bar {
+  height: 4px;
+  border-radius: 99px;
+  background: var(--accent);
+}
+
+.resource-count {
+  margin-left: auto;
+  font-size: .75rem;
+  color: var(--text-muted);
+  background: var(--surface2);
+  border-radius: 99px;
+  padding: 1px 7px;
+  min-width: 22px;
+  text-align: center;
+}
+.filter-all {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .45rem .6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 600;
+  transition: background .15s;
+  margin-bottom: .35rem;
+}
+.filter-all:hover, .filter-all.active { background: var(--surface2); }
+
+/* Timezone picker */
+.tz-select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: .5rem .7rem;
+  font-size: .85rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .7rem center;
+  padding-right: 2rem;
+}
+.tz-select:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Calendar wrapper ──────────────────────────────────── */
+.calendar-wrapper {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+#calendar { min-height: 600px; }
+
+/* FullCalendar overrides */
+.fc .fc-toolbar-title { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+.fc .fc-button {
+  background: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 6px !important;
+  font-size: .82rem !important;
+  font-weight: 600 !important;
+  padding: .3rem .7rem !important;
+  box-shadow: none !important;
+  transition: background .15s !important;
+}
+.fc .fc-button:hover { background: var(--border) !important; }
+.fc .fc-button-active, .fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: var(--text) !important;
+  color: var(--surface) !important;
+  border-color: var(--text) !important;
+}
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number { color: var(--text); font-weight: 600; font-size: .82rem; }
+.fc .fc-daygrid-day-top { justify-content: flex-end; }
+.fc-theme-standard td, .fc-theme-standard th { border-color: var(--border); }
+.fc-theme-standard .fc-scrollgrid { border-color: var(--border); }
+.fc .fc-event {
+  border: none !important;
+  border-radius: 5px !important;
+  font-size: .78rem !important;
+  padding: 1px 5px !important;
+  cursor: pointer;
+}
+.fc .fc-list-event:hover td { background: var(--surface2); }
+.fc .fc-list-day-cushion { background: var(--surface2); }
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .45rem 1rem;
+  border-radius: 7px;
+  font-size: .875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+.btn-primary:hover:not(:disabled) { opacity: .85; }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+.btn-ghost:hover { background: var(--surface2); color: var(--text); }
+.btn-outline {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn-outline:hover { background: var(--surface2); }
+.btn-success {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+}
+.btn-success:hover { opacity: .9; }
+.btn-sm { padding: .3rem .75rem; font-size: .8rem; }
+.btn-icon {
+  padding: .45rem;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s;
+}
+.btn-icon:hover { background: var(--surface2); color: var(--text); }
+
+/* ── Modal ─────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-backdrop.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(12px);
+  transition: transform .2s;
+}
+.modal-backdrop.open .modal { transform: translateY(0); }
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+.modal-title { font-size: 1.1rem; font-weight: 700; }
+.modal-close {
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center;
+  padding: .2rem; border-radius: 5px;
+  transition: color .15s;
+}
+.modal-close:hover { color: var(--text); }
+
+/* ── Form ──────────────────────────────────────────────── */
+.form-group { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+label { font-size: .83rem; font-weight: 600; color: var(--text-muted); }
+.form-control {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 7px;
+  padding: .55rem .8rem;
+  font-size: .9rem;
+  transition: border-color .15s, box-shadow .15s;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(71,85,105,.15);
+}
+select.form-control {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .8rem center;
+  padding-right: 2.2rem;
+  cursor: pointer;
+}
+.form-error { color: #ef4444; font-size: .8rem; display: none; }
+.form-error.show { display: block; }
+
+/* ── Success state ─────────────────────────────────────── */
+.success-panel {
+  text-align: center;
+  padding: 1rem 0;
+  display: none;
+}
+.success-panel.show { display: block; }
+.success-icon {
+  width: 56px; height: 56px;
+  background: #dcfce7;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 1rem;
+  color: #16a34a;
+}
+[data-theme="dark"] .success-icon { background: rgba(22,163,74,.2); }
+.success-title { font-size: 1.1rem; font-weight: 700; margin-bottom: .4rem; }
+.success-sub { color: var(--text-muted); font-size: .875rem; margin-bottom: 1.5rem; }
+
+/* ── Event detail panel ────────────────────────────────── */
+.detail-badge {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .8rem; font-weight: 600; border-radius: 99px;
+  padding: .2rem .7rem; margin-bottom: 1rem;
+}
+.detail-field { margin-bottom: .75rem; }
+.detail-label { font-size: .75rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-bottom: .2rem; }
+.detail-value { font-size: .9rem; }
+
+/* ── Toast ─────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--text); color: var(--surface);
+  padding: .7rem 1.2rem; border-radius: 8px;
+  font-size: .875rem; font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .25s, transform .25s;
+  z-index: 2000;
+  max-width: 320px;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.error { background: #ef4444; }
+
+/* ── Activity Feed ─────────────────────────────────────── */
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: .6rem;
+  padding: .5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  font-size: .8rem;
+}
+.activity-icon.created   { background: #dcfce7; color: #16a34a; }
+.activity-icon.cancelled { background: #fee2e2; color: #b91c1c; }
+.activity-icon.deleted   { background: #fef3c7; color: #b45309; }
+[data-theme="dark"] .activity-icon.created   { background: rgba(22,163,74,.2);  color: #4ade80; }
+[data-theme="dark"] .activity-icon.cancelled { background: rgba(185,28,28,.2);  color: #f87171; }
+[data-theme="dark"] .activity-icon.deleted   { background: rgba(180,83,9,.2);   color: #fbbf24; }
+.activity-body { min-width: 0; flex: 1; }
+.activity-title {
+  font-size: .82rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text);
+}
+.activity-meta {
+  display: flex; align-items: center; gap: .35rem;
+  font-size: .73rem; color: var(--text-muted); margin-top: .1rem;
+}
+.activity-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.activity-empty {
+  text-align: center; padding: 1.25rem 0;
+  color: var(--text-muted); font-size: .85rem;
+}
+
+/* ── Hover Tooltip ─────────────────────────────────────── */
+#eventTooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .15s, transform .15s;
+  max-width: 260px;
+  min-width: 200px;
+}
+#eventTooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.tooltip-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .85rem 1rem;
+  box-shadow: var(--shadow-lg);
+}
+.tooltip-bar {
+  height: 3px;
+  border-radius: 99px;
+  margin-bottom: .65rem;
+}
+.tooltip-title {
+  font-size: .875rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: .3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tooltip-resource {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: .55rem;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+.tooltip-time {
+  font-size: .78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.tooltip-desc {
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-top: .4rem;
+  border-top: 1px solid var(--border);
+  padding-top: .4rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ── Read-only fields (session auto-fill) ──────────────── */
+.form-control[readonly] {
+  opacity: .75;
+  cursor: default;
+}
+.form-control[readonly]:focus {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    </div>
+    BookIt
+  </div>
+  <div class="header-actions">
+    <!-- User session (hidden until JS resolves state) -->
+    <div id="userSessionUI" style="display:none;align-items:center;gap:.5rem">
+      <span id="userChip" style="
+        font-size:.78rem;font-weight:600;
+        background:var(--surface2);border:1px solid var(--border);
+        border-radius:99px;padding:.2rem .75rem;color:var(--text-muted);
+        white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis
+      "></span>
+      <button class="btn-icon" id="editProfileBtn" title="Edit profile" style="width:30px;height:30px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+      </button>
+      <button class="btn btn-ghost btn-sm" id="userSignOutBtn">Sign Out</button>
+    </div>
+    <button class="btn btn-outline btn-sm" id="signInBtn" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+        <polyline points="10 17 15 12 10 7"/>
+        <line x1="15" y1="12" x2="3" y2="12"/>
+      </svg>
+      Sign In
+    </button>
+
+    <button class="btn btn-primary btn-sm" id="openBookBtn" style="display:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      New Booking
+    </button>
+    <button class="btn-icon" id="themeToggle" title="Toggle theme">
+      <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+    <a href="/admin.html" class="btn-icon" title="Admin">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    </a>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────── -->
+<div class="main-layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Resource filter -->
+    <div class="card">
+      <div class="card-title">Resources</div>
+      <div class="filter-all active" id="filterAll">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+        </svg>
+        Top 5 Resources
+      </div>
+      <ul class="resource-list" id="resourceList"></ul>
+    </div>
+
+    <!-- Timezone -->
+    <div class="card">
+      <div class="card-title">Timezone</div>
+      <select class="tz-select" id="tzSelect"></select>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card" id="activityCard">
+      <div class="card-title">Recent Activity</div>
+      <ul id="activityList" style="list-style:none;display:flex;flex-direction:column;gap:.5rem"></ul>
+    </div>
+
+  </aside>
+
+  <!-- Calendar -->
+  <div class="calendar-wrapper">
+    <div id="calendar"></div>
+  </div>
+
+  <!-- Right panel -->
+  <aside class="right-panel">
+    <div class="card" id="topUsersCard">
+      <div class="card-title">Top 10 Users</div>
+      <ul id="topUsersList" style="list-style:none;display:flex;flex-direction:column;gap:.35rem"></ul>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- Booking Modal -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="bookingModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bookModalTitle">
+
+    <!-- Form view -->
+    <div id="bookFormView">
+      <div class="modal-header">
+        <h2 class="modal-title" id="bookModalTitle">New Booking</h2>
+        <button class="modal-close" id="closeBookBtn" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <form id="bookingForm" novalidate>
+        <div class="form-group">
+          <label for="bResource">Resource *</label>
+          <select class="form-control" id="bResource" required></select>
+          <span class="form-error" id="errResource">Please select a resource.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="bTitle">Booking Title *</label>
+          <input class="form-control" type="text" id="bTitle" placeholder="e.g. Location shoot – Downtown" required />
+          <span class="form-error" id="errTitle">Please enter a title.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="bDesc">Description</label>
+          <textarea class="form-control" id="bDesc" rows="2" placeholder="Optional notes…" style="resize:vertical"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Start *</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+            <input class="form-control" type="date" id="bStartDate" required />
+            <select class="form-control" id="bStartTime"></select>
+          </div>
+          <span class="form-error" id="errStart">Please select a start date and time.</span>
+        </div>
+
+        <div class="form-group">
+          <label>End *</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+            <input class="form-control" type="date" id="bEndDate" required />
+            <select class="form-control" id="bEndTime"></select>
+          </div>
+          <span class="form-error" id="errEnd">Please select an end date and time.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="bTimezone">Timezone</label>
+          <select class="form-control" id="bTimezone"></select>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="bName">Your Name *</label>
+            <input class="form-control" type="text" id="bName" placeholder="Jane Smith" required />
+            <span class="form-error" id="errName">Required.</span>
+          </div>
+          <div class="form-group">
+            <label for="bEmail">Email *</label>
+            <input class="form-control" type="email" id="bEmail" placeholder="jane@example.com" required />
+            <span class="form-error" id="errEmail">Valid email required.</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="bPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional — for SMS cancellation codes)</span></label>
+          <input class="form-control" type="tel" id="bPhone" placeholder="+1 555 000 0000" />
+        </div>
+
+        <div id="sessionBadge" style="display:none;margin-bottom:.85rem;padding:.6rem .85rem;
+             background:var(--surface2);border:1px solid var(--border);border-radius:7px;
+             font-size:.82rem;color:var(--text-muted);display:none;align-items:center;gap:.5rem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span id="sessionBadgeText"></span>
+          <button type="button" id="formSignOutBtn" style="margin-left:auto;font-size:.78rem;font-weight:600;
+                  color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;
+                  text-decoration:underline">Sign out</button>
+        </div>
+
+        <span class="form-error" id="errConflict" style="display:block;margin-bottom:.75rem"></span>
+
+        <div style="display:flex;gap:.75rem;justify-content:flex-end">
+          <button type="button" class="btn btn-outline" id="cancelBookBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submitBookBtn">Confirm Booking</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Success view -->
+    <div class="success-panel" id="bookSuccessView">
+      <div class="success-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <div class="success-title">Booking Confirmed!</div>
+      <div class="success-sub" id="successDetails"></div>
+      <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+        <a id="icsDownloadLink" class="btn btn-success" href="#">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download .ics
+        </a>
+        <button class="btn btn-outline" id="anotherBookBtn">Book Another</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- Event Detail Modal -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="eventModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+    <div class="modal-header">
+      <h2 class="modal-title" id="eventModalTitle">Booking Details</h2>
+      <button class="modal-close" id="closeEventBtn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Detail view -->
+    <div id="eventDetailBody"></div>
+
+    <div style="display:flex;gap:.75rem;justify-content:space-between;align-items:center;margin-top:1.25rem;flex-wrap:wrap">
+      <button class="btn btn-sm" id="cancelBookingBtn" style="background:#fee2e2;color:#b91c1c;border-color:#fca5a5;display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        Cancel Booking
+      </button>
+      <div style="display:flex;gap:.75rem;margin-left:auto">
+        <a id="detailIcsLink" class="btn btn-success btn-sm" href="#">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download .ics
+        </a>
+        <button class="btn btn-outline btn-sm" id="closeEventBtn2">Close</button>
+      </div>
+    </div>
+
+    <!-- Cancel: Step 1 — email entry -->
+    <div id="cancelStep1" style="display:none;margin-top:1.25rem;padding:1rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <p id="cancelStep1Desc" style="font-size:.875rem;margin-bottom:.85rem;color:var(--text)">
+        Enter the email address used when booking. We'll send you a 6-digit cancellation code.
+      </p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <input class="form-control" type="email" id="cancelEmail" placeholder="your@email.com"
+               style="flex:1;min-width:0" />
+        <button class="btn btn-sm" id="sendCodeBtn"
+                style="background:#b91c1c;color:#fff;border-color:#b91c1c;white-space:nowrap">
+          Send Code
+        </button>
+        <button class="btn btn-outline btn-sm" id="dismissCancelBtn">Never mind</button>
+      </div>
+      <span id="cancelError1" style="color:#ef4444;font-size:.8rem;margin-top:.5rem;display:none"></span>
+    </div>
+
+    <!-- Cancel: Step 2 — code entry -->
+    <div id="cancelStep2" style="display:none;margin-top:1.25rem;padding:1rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <p style="font-size:.875rem;margin-bottom:.85rem;color:var(--text)">
+        Enter the 6-digit code sent to your email (and phone if provided). The code expires in 15 minutes.
+      </p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <input class="form-control" type="text" id="cancelCode" placeholder="000000"
+               maxlength="6" inputmode="numeric" style="flex:1;min-width:0;letter-spacing:.2em;font-size:1.1rem" />
+        <button class="btn btn-sm" id="confirmCancelBtn"
+                style="background:#b91c1c;color:#fff;border-color:#b91c1c;white-space:nowrap">
+          Confirm Cancel
+        </button>
+        <button class="btn btn-outline btn-sm" id="backToStep1Btn">Back</button>
+      </div>
+      <span id="cancelError2" style="color:#ef4444;font-size:.8rem;margin-top:.5rem;display:none"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- Login Modal -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="loginModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle" style="max-width:400px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="loginModalTitle">Sign In</h2>
+      <button class="modal-close" id="closeLoginBtn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <p id="loginDesc" style="font-size:.875rem;color:var(--text-muted);margin-bottom:1.25rem">
+      Enter your email address to sign in to your account.
+    </p>
+
+    <form id="loginForm" novalidate>
+      <div class="form-group">
+        <label for="loginEmail">Email Address</label>
+        <input class="form-control" type="email" id="loginEmail"
+               placeholder="your@email.com" autocomplete="email" required />
+      </div>
+      <!-- Shown only when LDAP is enabled -->
+      <div class="form-group" id="loginPasswordGroup" style="display:none">
+        <label for="loginPassword">
+          Password
+          <span style="font-size:.75rem;font-weight:400;color:var(--text-muted);margin-left:.3rem">LDAP users only — leave blank for local accounts</span>
+        </label>
+        <input class="form-control" type="password" id="loginPassword"
+               placeholder="Your directory password" autocomplete="current-password" />
+      </div>
+      <span id="loginError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem"></span>
+      <button type="submit" class="btn btn-primary" id="loginSubmitBtn" style="width:100%">
+        Sign In
+      </button>
+    </form>
+
+    <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--border);text-align:center">
+      <p style="font-size:.85rem;color:var(--text-muted)">
+        New here?
+        <a href="/register.html" style="color:var(--text);font-weight:600;text-decoration:none">
+          Create an account →
+        </a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- Profile Edit Modal -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="profileModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle" style="max-width:440px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="profileModalTitle">Edit Profile</h2>
+      <button class="modal-close" id="closeProfileBtn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="profileForm" novalidate>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="profFirstName">First Name *</label>
+          <input class="form-control" type="text" id="profFirstName" placeholder="Jane" required />
+        </div>
+        <div class="form-group">
+          <label for="profLastName">Last Name *</label>
+          <input class="form-control" type="text" id="profLastName" placeholder="Smith" required />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="profEmail">Email Address *</label>
+        <input class="form-control" type="email" id="profEmail" placeholder="jane@example.com" required />
+      </div>
+
+      <div class="form-group">
+        <label for="profPhone">
+          Phone
+          <span style="font-size:.75rem;font-weight:400;color:var(--text-muted);margin-left:.3rem">optional · SMS cancellation codes</span>
+        </label>
+        <input class="form-control" type="tel" id="profPhone" placeholder="+1 555 000 0000" />
+      </div>
+
+      <div class="form-group">
+        <label for="profTimezone">Timezone</label>
+        <select class="form-control" id="profTimezone"></select>
+      </div>
+
+      <span id="profileError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem"></span>
+
+      <div style="display:flex;gap:.75rem;justify-content:flex-end">
+        <button type="button" class="btn btn-outline" id="cancelProfileBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="saveProfileBtn">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Hover Tooltip -->
+<div id="eventTooltip">
+  <div class="tooltip-inner">
+    <div class="tooltip-bar" id="tooltipBar"></div>
+    <div class="tooltip-title" id="tooltipTitle"></div>
+    <div class="tooltip-resource" id="tooltipResource"></div>
+    <div class="tooltip-time" id="tooltipTime"></div>
+    <div class="tooltip-desc" id="tooltipDesc"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// Config & State
+// ════════════════════════════════════════════════════════
+const API = '/api';
+let resources         = [];
+let appointments      = [];
+let calendar;
+let activeFilter      = null;  // null = all
+let currentTz         = Intl.DateTimeFormat().resolvedOptions().timeZone;
+let requireCancelCode = true;  // default on; overridden by settings fetch
+let ldapEnabled       = false; // overridden by settings fetch
+
+// ── Theme ────────────────────────────────────────────────
+const html       = document.documentElement;
+const themeBtn   = document.getElementById('themeToggle');
+const themeIcon  = document.getElementById('themeIcon');
+
+const MOON_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+</svg>`;
+const SUN_SVG = themeBtn.innerHTML;
+
+function applyTheme(t) {
+  html.dataset.theme = t;
+  themeBtn.innerHTML = t === 'dark' ? MOON_SVG : SUN_SVG;
+  localStorage.setItem('bt-theme', t);
+}
+themeBtn.addEventListener('click', () =>
+  applyTheme(html.dataset.theme === 'dark' ? 'light' : 'dark')
+);
+applyTheme(localStorage.getItem('bt-theme') || 'light');
+
+// ── Toast ────────────────────────────────────────────────
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function showToast(msg, type = 'info') {
+  toastEl.textContent = msg;
+  toastEl.className   = 'show' + (type === 'error' ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.className = '', 3500);
+}
+
+// ── Timezone select population ───────────────────────────
+const TZ_COMMON = [
+  'UTC',
+  'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+  'America/Anchorage','Pacific/Honolulu',
+  'America/Toronto','America/Vancouver','America/Sao_Paulo','America/Mexico_City',
+  'Europe/London','Europe/Paris','Europe/Berlin','Europe/Rome','Europe/Madrid',
+  'Europe/Moscow','Europe/Istanbul',
+  'Asia/Dubai','Asia/Kolkata','Asia/Bangkok','Asia/Shanghai',
+  'Asia/Tokyo','Asia/Seoul','Asia/Singapore','Asia/Hong_Kong',
+  'Australia/Sydney','Australia/Melbourne','Pacific/Auckland',
+  'Africa/Cairo','Africa/Nairobi','Africa/Johannesburg',
+];
+
+function populateTzSelect(selectEl, selectedTz) {
+  selectEl.innerHTML = '';
+  TZ_COMMON.forEach(tz => {
+    const opt = document.createElement('option');
+    opt.value = tz;
+    opt.textContent = tz.replace(/_/g, ' ');
+    if (tz === selectedTz) opt.selected = true;
+    selectEl.appendChild(opt);
+  });
+}
+
+populateTzSelect(document.getElementById('tzSelect'), currentTz);
+populateTzSelect(document.getElementById('bTimezone'), currentTz);
+
+// ── Time slot selects (15-min increments) ───────────────
+function buildTimeOptions(selectEl, selectedValue) {
+  selectEl.innerHTML = '';
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const hh    = String(h).padStart(2, '0');
+      const mm    = String(m).padStart(2, '0');
+      const value = `${hh}:${mm}`;
+      const label = formatTime12(h, m);
+      const opt   = document.createElement('option');
+      opt.value   = value;
+      opt.textContent = label;
+      if (value === selectedValue) opt.selected = true;
+      selectEl.appendChild(opt);
+    }
+  }
+}
+
+function formatTime12(h, m) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12    = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+// Auto-advance end date/time when start changes
+function onStartChange() {
+  const startDate = document.getElementById('bStartDate').value;
+  const startTime = document.getElementById('bStartTime').value;
+  const endDate   = document.getElementById('bEndDate');
+  const endTime   = document.getElementById('bEndTime');
+
+  // Default end date to same as start if not set
+  if (startDate && !endDate.value) endDate.value = startDate;
+
+  // Default end time to start + 1 hour if end is not ahead of start
+  if (startTime) {
+    const [sh, sm] = startTime.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    const curEndTime = endTime.value;
+    const curEndDate = endDate.value;
+    const [eh, em] = curEndTime ? curEndTime.split(':').map(Number) : [0, 0];
+    const endMins = eh * 60 + em;
+
+    if (!curEndTime || (curEndDate === startDate && endMins <= startMins)) {
+      const newEndMins = startMins + 60;
+      if (newEndMins >= 1440) {
+        // Wrap to next day
+        const overflow = newEndMins - 1440;
+        const nh = Math.floor(overflow / 60);
+        const nm = overflow % 60 - (overflow % 15 > 0 ? overflow % 15 : 0);
+        endTime.value = `${String(nh).padStart(2,'0')}:${String(nm - nm % 15).padStart(2,'0')}`;
+        if (startDate) {
+          const d = new Date(startDate + 'T00:00:00');
+          d.setDate(d.getDate() + 1);
+          endDate.value = d.toISOString().slice(0, 10);
+        }
+      } else {
+        const nh = Math.floor(newEndMins / 60);
+        const nm = newEndMins % 60;
+        // Round to nearest 15
+        const nmR = Math.ceil(nm / 15) * 15 % 60;
+        const nhR = nh + (Math.ceil(nm / 15) * 15 >= 60 ? 1 : 0);
+        endTime.value = `${String(nhR % 24).padStart(2,'0')}:${String(nmR).padStart(2,'0')}`;
+        if (!curEndDate && startDate) endDate.value = startDate;
+      }
+    }
+  }
+}
+
+buildTimeOptions(document.getElementById('bStartTime'), '09:00');
+buildTimeOptions(document.getElementById('bEndTime'),   '10:00');
+
+document.getElementById('bStartDate').addEventListener('change', onStartChange);
+document.getElementById('bStartTime').addEventListener('change', onStartChange);
+
+document.getElementById('tzSelect').addEventListener('change', e => {
+  currentTz = e.target.value;
+  if (calendar) {
+    calendar.setOption('timeZone', currentTz);
+    calendar.refetchEvents();
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// API helpers
+// ════════════════════════════════════════════════════════
+async function apiFetch(path, opts = {}) {
+  // Destructure headers out of opts so ...restOpts doesn't overwrite our merged headers.
+  const { headers: extraHeaders, ...restOpts } = opts;
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...(extraHeaders || {}) },
+    ...restOpts,
+  });
+
+  // Safely parse — server might return HTML on unexpected errors
+  let data;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    // Try to parse anyway in case content-type header is missing
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error (${res.status}): unexpected response format`); }
+  }
+
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+// ════════════════════════════════════════════════════════
+// Resources
+// ════════════════════════════════════════════════════════
+async function loadResources() {
+  resources = await apiFetch('/resources');
+  renderResourceSidebar();
+  renderResourceSelect();
+  startActivityPolling();
+  loadTopUsers();
+}
+
+async function loadTopUsers() {
+  try {
+    const users = await apiFetch('/stats/top-users');
+    const list  = document.getElementById('topUsersList');
+    list.innerHTML = '';
+
+    if (!users.length) {
+      list.innerHTML = '<li style="font-size:.8rem;color:var(--text-muted)">No bookings yet.</li>';
+      return;
+    }
+
+    const maxHours = users[0].total_hours || 1;
+
+    users.forEach((u, i) => {
+      const pct  = Math.round((u.total_hours / maxHours) * 100);
+      const hrs  = u.total_hours === 1 ? '1 hr' : `${u.total_hours} hrs`;
+      const li   = document.createElement('li');
+      li.innerHTML = `
+        <div class="top-user-row">
+          <span class="top-user-rank">${i + 1}.</span>
+          <span class="top-user-name" title="${u.name}">${u.name}</span>
+          <span class="top-user-hours">${hrs}</span>
+        </div>
+        <div class="top-user-bar-wrap">
+          <div class="top-user-bar" style="width:${pct}%"></div>
+        </div>`;
+      list.appendChild(li);
+    });
+  } catch {
+    // Silently hide the card if the endpoint fails
+    const card = document.getElementById('topUsersCard');
+    if (card) card.style.display = 'none';
+  }
+}
+
+function renderResourceSidebar() {
+  const list = document.getElementById('resourceList');
+  const all  = document.getElementById('filterAll');
+
+  list.innerHTML = '';
+
+  // Resources arrive pre-sorted by booking_count DESC from the API.
+  // Show only the top 5 most requested.
+  const top5 = resources.slice(0, 5);
+
+  top5.forEach(r => {
+    const li = document.createElement('li');
+    li.className   = 'resource-item' + (activeFilter === r.id ? ' active' : '');
+    li.dataset.id  = r.id;
+    li.innerHTML   = `
+      <span class="resource-dot" style="background:${r.color}"></span>
+      <span>${r.name}</span>
+      <span class="resource-count" id="cnt-${r.id}">0</span>
+    `;
+    li.addEventListener('click', () => setFilter(r.id));
+    list.appendChild(li);
+  });
+
+  all.classList.toggle('active', activeFilter === null);
+}
+
+function renderResourceSelect() {
+  const sel = document.getElementById('bResource');
+  sel.innerHTML = '<option value="">Select a resource…</option>';
+  resources.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ── Activity Feed ─────────────────────────────────────────
+const ACTIVITY_ICONS = {
+  created:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  cancelled: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  deleted:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+};
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+async function loadActivity() {
+  const list = document.getElementById('activityList');
+  try {
+    const { data: events } = await apiFetch('/activity?limit=5');
+    if (!events.length) {
+      list.innerHTML = '<li class="activity-empty">No activity yet</li>';
+      return;
+    }
+    list.innerHTML = events.map(e => `
+      <li class="activity-item">
+        <div class="activity-icon ${e.action}">${ACTIVITY_ICONS[e.action] || ''}</div>
+        <div class="activity-body">
+          <div class="activity-title">${e.appointment_title}</div>
+          <div class="activity-meta">
+            <span class="activity-dot" style="background:${e.resource_color}"></span>
+            <span>${e.resource_name}</span>
+            <span style="margin-left:auto;flex-shrink:0">${timeAgo(e.created_at)}</span>
+          </div>
+        </div>
+      </li>
+    `).join('');
+  } catch {
+    list.innerHTML = '<li class="activity-empty">Could not load activity</li>';
+  }
+}
+
+let activityTimer;
+function startActivityPolling() {
+  loadActivity();
+  clearInterval(activityTimer);
+  activityTimer = setInterval(loadActivity, 30000);
+}
+
+function setFilter(id) {
+  activeFilter = id;
+  document.querySelectorAll('.resource-item').forEach(el =>
+    el.classList.toggle('active', parseInt(el.dataset.id) === id)
+  );
+  document.getElementById('filterAll').classList.toggle('active', id === null);
+  if (calendar) calendar.refetchEvents();
+}
+
+document.getElementById('filterAll').addEventListener('click', () => setFilter(null));
+
+// Update appointment counts in sidebar
+function updateCounts(events) {
+  const counts = {};
+  events.forEach(e => {
+    const rid = e.extendedProps?.resource_id;
+    counts[rid] = (counts[rid] || 0) + 1;
+  });
+  resources.forEach(r => {
+    const el = document.getElementById('cnt-' + r.id);
+    if (el) el.textContent = counts[r.id] || 0;
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// Calendar
+// ════════════════════════════════════════════════════════
+function initCalendar() {
+  const el = document.getElementById('calendar');
+  calendar = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    headerToolbar: {
+      left:   'prev,next today',
+      center: 'title',
+      right:  'dayGridMonth,timeGridWeek,timeGridDay,listWeek',
+    },
+    timeZone: currentTz,
+    editable: false,
+    selectable: true,
+    selectMirror: true,
+    navLinks: true,
+    nowIndicator: true,
+    eventDisplay: 'block',
+
+    // Fetch events from our API
+    events: async (info, successCb, failureCb) => {
+      try {
+        let url = `/appointments?start=${info.startStr}&end=${info.endStr}`;
+        if (activeFilter !== null) url += `&resource_id=${activeFilter}`;
+        const data = await apiFetch(url);
+        const events = data.map(a => ({
+          id:    String(a.id),
+          title: a.title,
+          start: a.start_time,
+          end:   a.end_time,
+          backgroundColor: a.resource_color,
+          borderColor:     a.resource_color,
+          extendedProps:   a,
+        }));
+        updateCounts(events);
+        successCb(events);
+      } catch (err) {
+        failureCb(err);
+        showToast('Failed to load events', 'error');
+      }
+    },
+
+    // Click on date → open booking form pre-filled
+    select(info) {
+      openBookingModal(info.startStr, info.endStr);
+      calendar.unselect();
+    },
+
+    // Click on event → show detail
+    eventClick(info) {
+      showEventDetail(info.event.extendedProps);
+    },
+
+    // Hover → tooltip
+    eventMouseEnter(info) {
+      showTooltip(info.event.extendedProps, info.jsEvent);
+    },
+    eventMouseLeave() {
+      hideTooltip();
+    },
+  });
+
+  calendar.render();
+}
+
+// ════════════════════════════════════════════════════════
+// Booking Modal
+// ════════════════════════════════════════════════════════
+const bookingModal = document.getElementById('bookingModal');
+const bookFormView = document.getElementById('bookFormView');
+const bookSuccessView = document.getElementById('bookSuccessView');
+
+function openBookingModal(start = '', end = '') {
+  resetBookingForm();
+
+  // Parse date/time directly from the ISO string so we always read the wall-clock
+  // time in the calendar's timezone, regardless of the browser's local timezone.
+  // With the Luxon adapter, startStr is like "2024-07-15T14:00:00-04:00"; the first
+  // 16 chars always give us YYYY-MM-DDTHH:MM in the calendar's displayed timezone.
+  const pad = n => String(n).padStart(2, '0');
+
+  if (start && start.length >= 16) {
+    const datePart = start.substring(0, 10);
+    const rawH = parseInt(start.substring(11, 13), 10);
+    const rawM = parseInt(start.substring(14, 16), 10);
+    const snappedM = Math.round(rawM / 15) * 15 % 60;
+    const snappedH = rawH + (Math.round(rawM / 15) * 15 >= 60 ? 1 : 0);
+    document.getElementById('bStartDate').value = datePart;
+    document.getElementById('bStartTime').value = `${pad(snappedH % 24)}:${pad(snappedM)}`;
+  }
+  if (end && end.length >= 16) {
+    const datePart = end.substring(0, 10);
+    const rawH = parseInt(end.substring(11, 13), 10);
+    const rawM = parseInt(end.substring(14, 16), 10);
+    const snappedM = Math.round(rawM / 15) * 15 % 60;
+    const snappedH = rawH + (Math.round(rawM / 15) * 15 >= 60 ? 1 : 0);
+    document.getElementById('bEndDate').value = datePart;
+    document.getElementById('bEndTime').value = `${pad(snappedH % 24)}:${pad(snappedM)}`;
+  }
+
+  populateTzSelect(document.getElementById('bTimezone'), currentTz);
+
+  // Auto-populate from session
+  if (userSession) {
+    const nameParts = userSession.name.split(' ');
+    document.getElementById('bName').value  = userSession.name;
+    document.getElementById('bEmail').value = userSession.email;
+    document.getElementById('bPhone').value = userSession.phone || '';
+    document.getElementById('bName').readOnly  = true;
+    document.getElementById('bEmail').readOnly = true;
+  } else {
+    document.getElementById('bName').readOnly  = false;
+    document.getElementById('bEmail').readOnly = false;
+  }
+  updateAuthUI(); // refresh badge visibility
+
+  bookingModal.classList.add('open');
+}
+
+function closeBookingModal() {
+  bookingModal.classList.remove('open');
+}
+
+document.getElementById('openBookBtn').addEventListener('click', () => openBookingModal());
+document.getElementById('closeBookBtn').addEventListener('click', closeBookingModal);
+document.getElementById('cancelBookBtn').addEventListener('click', closeBookingModal);
+document.getElementById('anotherBookBtn').addEventListener('click', () => {
+  resetBookingForm();
+});
+
+function resetBookingForm() {
+  document.getElementById('bookingForm').reset();
+  // reset() clears selects too, so restore defaults
+  document.getElementById('bStartTime').value = '09:00';
+  document.getElementById('bEndTime').value   = '10:00';
+  // Restore readonly state based on session
+  document.getElementById('bName').readOnly  = !!userSession;
+  document.getElementById('bEmail').readOnly = !!userSession;
+  bookFormView.style.display = '';
+  bookSuccessView.classList.remove('show');
+  document.querySelectorAll('.form-error').forEach(el => el.classList.remove('show'));
+}
+
+// Close on backdrop click
+bookingModal.addEventListener('click', e => {
+  if (e.target === bookingModal) closeBookingModal();
+});
+
+// ── Form submit ──────────────────────────────────────────
+document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  // Validate
+  let valid = true;
+  function require(id, errId, test) {
+    const val = document.getElementById(id).value.trim();
+    const err = document.getElementById(errId);
+    if (!test(val)) { err.classList.add('show'); valid = false; }
+    else err.classList.remove('show');
+    return val;
+  }
+
+  const resource_id = require('bResource', 'errResource', v => v !== '');
+  const title       = require('bTitle',    'errTitle',    v => v.length > 0);
+  // Validate start date/time
+  const startDate = document.getElementById('bStartDate').value;
+  const startTime = document.getElementById('bStartTime').value;
+  const endDate   = document.getElementById('bEndDate').value;
+  const endTime   = document.getElementById('bEndTime').value;
+
+  const errStartEl = document.getElementById('errStart');
+  const errEndEl   = document.getElementById('errEnd');
+
+  if (!startDate || !startTime) { errStartEl.classList.add('show'); valid = false; }
+  else errStartEl.classList.remove('show');
+
+  if (!endDate || !endTime) { errEndEl.classList.add('show'); valid = false; }
+  else errEndEl.classList.remove('show');
+
+  // Validate end is after start
+  if (startDate && startTime && endDate && endTime) {
+    const start_dt = new Date(`${startDate}T${startTime}`);
+    const end_dt   = new Date(`${endDate}T${endTime}`);
+    if (end_dt <= start_dt) {
+      errEndEl.textContent = 'End must be after start.';
+      errEndEl.classList.add('show');
+      valid = false;
+    } else {
+      errEndEl.textContent = 'Please select an end date and time.';
+    }
+  }
+
+  const booked_by_name  = require('bName',  'errName',  v => v.length > 0);
+  const booked_by_email = require('bEmail', 'errEmail', v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+
+  if (!valid) return;
+
+  // Convert the wall-clock times (in the booking's timezone) to UTC ISO strings.
+  const tz         = document.getElementById('bTimezone').value;
+  const start_time = zonedToUTC(startDate, startTime, tz);
+  const end_time   = zonedToUTC(endDate,   endTime,   tz);
+
+  const conflictEl = document.getElementById('errConflict');
+  conflictEl.classList.remove('show');
+
+  const btn = document.getElementById('submitBookBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const phone = document.getElementById('bPhone').value.trim();
+
+    const payload = {
+      resource_id:     parseInt(resource_id),
+      title,
+      description:     document.getElementById('bDesc').value.trim(),
+      booked_by_name,
+      booked_by_email: document.getElementById('bEmail').value.trim(),
+      booked_by_phone: phone || undefined,
+      start_time,
+      end_time,
+      timezone:        tz,
+    };
+
+    const appt = await apiFetch('/appointments', {
+      method: 'POST',
+      body:   JSON.stringify(payload),
+    });
+
+    // Show success
+    bookFormView.style.display = 'none';
+    bookSuccessView.classList.add('show');
+
+    const res = resources.find(r => r.id === appt.resource_id);
+    document.getElementById('successDetails').textContent =
+      `${res?.name || 'Resource'} booked for ${formatDateRange(appt.start_time, appt.end_time, tz)}`;
+
+    document.getElementById('icsDownloadLink').href = `/api/appointments/${appt.id}/ics`;
+    document.getElementById('icsDownloadLink').download = `booking-${appt.id}.ics`;
+
+    if (calendar) calendar.refetchEvents();
+    loadActivity();
+    showToast('Booking confirmed!');
+
+  } catch (err) {
+    if (err.message.includes('conflict')) {
+      conflictEl.textContent = 'This time slot conflicts with an existing booking. Please choose a different time.';
+      conflictEl.classList.add('show');
+    } else {
+      showToast(err.message || 'Failed to create booking', 'error');
+    }
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Confirm Booking';
+  }
+});
+
+// Convert a wall-clock date + time entered in `tz` to a UTC ISO string for the API.
+// Uses Intl to compute the exact UTC offset at that wall-clock moment (handles DST).
+function zonedToUTC(dateStr, timeStr, tz) {
+  // Treat the inputs as UTC to get a reference timestamp
+  const asUTC = new Date(`${dateStr}T${timeStr}:00Z`);
+  // Ask Intl what wall-clock time that UTC instant shows in the target tz
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).formatToParts(asUTC);
+  const p = {};
+  parts.forEach(({ type, value }) => { p[type] = value; });
+  const h = p.hour === '24' ? '00' : p.hour;
+  // Build a UTC date from the Intl-formatted wall-clock parts
+  const tzWall = new Date(`${p.year}-${p.month}-${p.day}T${h}:${p.minute}:${p.second}Z`);
+  // Offset = how far the reference UTC is from what the target tz actually shows
+  const offset = asUTC.getTime() - tzWall.getTime();
+  return new Date(asUTC.getTime() + offset).toISOString();
+}
+
+function formatDateRange(start, end, tz) {
+  const opts = { timeZone: tz, month: 'short', day: 'numeric', year: 'numeric',
+                 hour: 'numeric', minute: '2-digit' };
+  return `${new Date(start).toLocaleString('en-US', opts)} – ${new Date(end).toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' })}`;
+}
+
+// ════════════════════════════════════════════════════════
+// Event Detail Modal
+// ════════════════════════════════════════════════════════
+const eventModal = document.getElementById('eventModal');
+let currentApptId = null;
+
+function showEventDetail(appt) {
+  currentApptId = appt.id;
+  const tz   = currentTz;
+  const opts = { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+                 year: 'numeric', hour: 'numeric', minute: '2-digit' };
+
+  document.getElementById('eventModalTitle').textContent = appt.title;
+
+  const color      = appt.resource_color || '#64748b';
+  const cancelled  = appt.status === 'cancelled';
+
+  document.getElementById('eventDetailBody').innerHTML = `
+    <div class="detail-badge" style="background:${color}22;color:${color}">
+      <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>
+      ${appt.resource_name || 'Resource'}
+    </div>
+    <div class="detail-field">
+      <div class="detail-label">When</div>
+      <div class="detail-value">
+        ${new Date(appt.start_time).toLocaleString('en-US', opts)}<br>
+        to ${new Date(appt.end_time).toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' })}
+        <span style="color:var(--text-muted);font-size:.8rem"> (${tz})</span>
+      </div>
+    </div>
+    ${appt.description ? `
+    <div class="detail-field">
+      <div class="detail-label">Notes</div>
+      <div class="detail-value">${appt.description}</div>
+    </div>` : ''}
+    <div class="detail-field">
+      <div class="detail-label">Booked by</div>
+      <div class="detail-value">${appt.booked_by_name} &lt;${appt.booked_by_email}&gt;</div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-label">Status</div>
+      <div class="detail-value" style="text-transform:capitalize;font-weight:600;color:${cancelled ? '#b91c1c' : 'inherit'}">${appt.status}</div>
+    </div>
+  `;
+
+  document.getElementById('detailIcsLink').href     = `/api/appointments/${appt.id}/ics`;
+  document.getElementById('detailIcsLink').download = `booking-${appt.id}.ics`;
+
+  // Reset cancel UI
+  const cancelBtn = document.getElementById('cancelBookingBtn');
+  cancelBtn.style.display = cancelled ? 'none' : '';
+  resetCancelFlow();
+
+  eventModal.classList.add('open');
+}
+
+function resetCancelFlow() {
+  document.getElementById('cancelStep1').style.display  = 'none';
+  document.getElementById('cancelStep2').style.display  = 'none';
+  const emailEl = document.getElementById('cancelEmail');
+  emailEl.value    = '';
+  emailEl.readOnly = false;
+  emailEl.style.opacity = '';
+  emailEl.style.cursor  = '';
+  document.getElementById('cancelCode').value           = '';
+  document.getElementById('cancelError1').style.display = 'none';
+  document.getElementById('cancelError2').style.display = 'none';
+  document.getElementById('cancelBookingBtn').style.display = '';
+}
+
+// ── Cancel flow — Step 1: enter email, request code ──────
+document.getElementById('cancelBookingBtn').addEventListener('click', () => {
+  const emailEl = document.getElementById('cancelEmail');
+
+  if (userSession) {
+    // Pre-fill and lock the field — only the booking owner can cancel
+    emailEl.value    = userSession.email;
+    emailEl.readOnly = true;
+    emailEl.style.opacity = '0.7';
+    emailEl.style.cursor  = 'default';
+    document.getElementById('cancelStep1Desc').textContent = requireCancelCode
+      ? `We'll send a 6-digit cancellation code to ${userSession.email}.`
+      : `Confirm cancellation for ${userSession.email}.`;
+  } else {
+    emailEl.value    = '';
+    emailEl.readOnly = false;
+    emailEl.style.opacity = '';
+    emailEl.style.cursor  = '';
+    document.getElementById('cancelStep1Desc').textContent = requireCancelCode
+      ? 'Enter the email address used when booking. We\'ll send you a 6-digit cancellation code.'
+      : 'Enter the email address used when booking to confirm cancellation.';
+  }
+
+  document.getElementById('sendCodeBtn').textContent = requireCancelCode ? 'Send Code' : 'Cancel Booking';
+  document.getElementById('cancelStep1').style.display      = '';
+  document.getElementById('cancelBookingBtn').style.display = 'none';
+  if (!userSession) emailEl.focus();
+});
+
+document.getElementById('dismissCancelBtn').addEventListener('click', resetCancelFlow);
+
+document.getElementById('sendCodeBtn').addEventListener('click', async () => {
+  const email = document.getElementById('cancelEmail').value.trim();
+  const errEl = document.getElementById('cancelError1');
+  const btn   = document.getElementById('sendCodeBtn');
+
+  errEl.style.display = 'none';
+  if (!email) { errEl.textContent = 'Please enter your email.'; errEl.style.display = ''; return; }
+
+  btn.disabled    = true;
+  btn.textContent = requireCancelCode ? 'Sending…' : 'Cancelling…';
+
+  try {
+    const result = await apiFetch(`/appointments/${currentApptId}/request-cancel`, {
+      method: 'POST',
+      body:   JSON.stringify({ email }),
+    });
+
+    if (result.direct) {
+      // Code verification is off — booking was cancelled directly
+      eventModal.classList.remove('open');
+      if (calendar) calendar.refetchEvents();
+      loadActivity();
+      showToast('Booking cancelled successfully.');
+    } else {
+      // Move to step 2 for code entry
+      document.getElementById('cancelStep1').style.display = 'none';
+      document.getElementById('cancelStep2').style.display = '';
+      document.getElementById('cancelCode').focus();
+    }
+  } catch (err) {
+    errEl.textContent   = err.message || 'Could not process request. Please try again.';
+    errEl.style.display = '';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = requireCancelCode ? 'Send Code' : 'Cancel Booking';
+  }
+});
+
+// ── Cancel flow — Step 2: enter code, confirm ────────────
+document.getElementById('backToStep1Btn').addEventListener('click', () => {
+  document.getElementById('cancelStep2').style.display  = 'none';
+  document.getElementById('cancelStep1').style.display  = '';
+  document.getElementById('cancelError2').style.display = 'none';
+});
+
+document.getElementById('confirmCancelBtn').addEventListener('click', async () => {
+  const code  = document.getElementById('cancelCode').value.trim();
+  const errEl = document.getElementById('cancelError2');
+  const btn   = document.getElementById('confirmCancelBtn');
+
+  errEl.style.display = 'none';
+  if (!code || code.length !== 6) {
+    errEl.textContent = 'Please enter the 6-digit code.';
+    errEl.style.display = '';
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Cancelling…';
+
+  try {
+    await apiFetch(`/appointments/${currentApptId}/cancel`, {
+      method: 'POST',
+      body:   JSON.stringify({ code }),
+    });
+    eventModal.classList.remove('open');
+    if (calendar) calendar.refetchEvents();
+    loadActivity();
+    showToast('Booking cancelled successfully.');
+  } catch (err) {
+    errEl.textContent   = err.message || 'Invalid or expired code.';
+    errEl.style.display = '';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Confirm Cancel';
+  }
+});
+
+// ── Close handlers ───────────────────────────────────────
+function closeEventModal() {
+  eventModal.classList.remove('open');
+  resetCancelFlow();
+}
+
+document.getElementById('closeEventBtn').addEventListener('click',  closeEventModal);
+document.getElementById('closeEventBtn2').addEventListener('click', closeEventModal);
+eventModal.addEventListener('click', e => { if (e.target === eventModal) closeEventModal(); });
+
+// ── Close modals on Escape ───────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    bookingModal.classList.remove('open');
+    eventModal.classList.remove('open');
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// Hover Tooltip
+// ════════════════════════════════════════════════════════
+const tooltip    = document.getElementById('eventTooltip');
+let tooltipTimer = null;
+
+function showTooltip(appt, mouseEvent) {
+  clearTimeout(tooltipTimer);
+
+  // Populate
+  const color = appt.resource_color || '#64748b';
+  document.getElementById('tooltipBar').style.background      = color;
+  document.getElementById('tooltipTitle').textContent         = appt.title || '';
+  document.getElementById('tooltipResource').innerHTML        =
+    `<span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>${appt.resource_name || ''}`;
+
+  const tz   = currentTz;
+  const opts = { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+                 hour: 'numeric', minute: '2-digit' };
+  const endOpts = { timeZone: tz, hour: 'numeric', minute: '2-digit' };
+  document.getElementById('tooltipTime').textContent =
+    `${new Date(appt.start_time).toLocaleString('en-US', opts)} – ${new Date(appt.end_time).toLocaleString('en-US', endOpts)}`;
+
+  const descEl = document.getElementById('tooltipDesc');
+  if (appt.description) {
+    descEl.textContent    = appt.description;
+    descEl.style.display  = '';
+  } else {
+    descEl.style.display  = 'none';
+  }
+
+  positionTooltip(mouseEvent);
+  tooltip.classList.add('visible');
+
+  // Track mouse movement while over the event
+  document.addEventListener('mousemove', onMouseMove);
+}
+
+function hideTooltip() {
+  tooltipTimer = setTimeout(() => {
+    tooltip.classList.remove('visible');
+    document.removeEventListener('mousemove', onMouseMove);
+  }, 80);
+}
+
+function onMouseMove(e) {
+  positionTooltip(e);
+}
+
+function positionTooltip(e) {
+  const GAP    = 14;
+  const TW     = tooltip.offsetWidth  || 260;
+  const TH     = tooltip.offsetHeight || 140;
+  const vw     = window.innerWidth;
+  const vh     = window.innerHeight;
+
+  let x = e.clientX + GAP;
+  let y = e.clientY + GAP;
+
+  // Flip left if too close to right edge
+  if (x + TW + 8 > vw) x = e.clientX - TW - GAP;
+  // Flip up if too close to bottom edge
+  if (y + TH + 8 > vh) y = e.clientY - TH - GAP;
+
+  tooltip.style.left = x + 'px';
+  tooltip.style.top  = y + 'px';
+}
+
+// ════════════════════════════════════════════════════════
+// User Session (passwordless)
+// ════════════════════════════════════════════════════════
+let userSession = null; // { id, name, email, phone }
+
+function decodeToken(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
+}
+
+// Sync the calendar + sidebar tzSelect to a given IANA timezone string.
+// Falls back to browser local if tz is falsy or unrecognised.
+function applyUserTimezone(tz) {
+  const resolved = tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  currentTz = resolved;
+  // Update sidebar picker
+  const tzSel = document.getElementById('tzSelect');
+  if (tzSel) tzSel.value = resolved;
+  // Update calendar if already initialised
+  if (calendar) {
+    calendar.setOption('timeZone', resolved);
+    calendar.refetchEvents();
+  }
+}
+
+function updateAuthUI() {
+  const sessionUI  = document.getElementById('userSessionUI');
+  const signInBtn  = document.getElementById('signInBtn');
+  const openBookBtn = document.getElementById('openBookBtn');
+  const userChip   = document.getElementById('userChip');
+  const badge      = document.getElementById('sessionBadge');
+  const badgeTxt   = document.getElementById('sessionBadgeText');
+
+  if (userSession) {
+    sessionUI.style.display   = 'flex';
+    signInBtn.style.display   = 'none';
+    openBookBtn.style.display = '';
+    userChip.textContent      = userSession.name;
+    if (badge) {
+      badge.style.display  = 'flex';
+      badgeTxt.textContent = `Signed in as ${userSession.name} (${userSession.email})`;
+    }
+  } else {
+    sessionUI.style.display   = 'none';
+    signInBtn.style.display   = '';
+    openBookBtn.style.display = 'none';
+    if (badge) badge.style.display = 'none';
+  }
+}
+
+async function loadUserSession() {
+  const token = localStorage.getItem('bt-user-token');
+  if (!token) { updateAuthUI(); return; }
+
+  const payload = decodeToken(token);
+  if (!payload || payload.type !== 'user' || payload.exp * 1000 < Date.now()) {
+    localStorage.removeItem('bt-user-token');
+    localStorage.removeItem('bt-user');
+    updateAuthUI();
+    return;
+  }
+
+  // Use cached user data immediately, verify in background
+  try {
+    const cached = JSON.parse(localStorage.getItem('bt-user') || 'null');
+    if (cached) { userSession = cached; updateAuthUI(); applyUserTimezone(cached.timezone); }
+  } catch { /* ignore */ }
+
+  // Verify token with server and refresh user data
+  try {
+    const data = await apiFetch('/auth/me', {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    userSession = data;
+    localStorage.setItem('bt-user', JSON.stringify(data));
+    updateAuthUI();
+    applyUserTimezone(data.timezone);
+  } catch {
+    // Token invalid/expired
+    localStorage.removeItem('bt-user-token');
+    localStorage.removeItem('bt-user');
+    userSession = null;
+    updateAuthUI();
+  }
+}
+
+function signOut() {
+  localStorage.removeItem('bt-user-token');
+  localStorage.removeItem('bt-user');
+  userSession = null;
+  updateAuthUI();
+  showToast('Signed out.');
+}
+
+// ── Login Modal ──────────────────────────────────────────
+const loginModal = document.getElementById('loginModal');
+
+function openLoginModal() {
+  document.getElementById('loginEmail').value    = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').style.display = 'none';
+  loginModal.classList.add('open');
+  setTimeout(() => document.getElementById('loginEmail').focus(), 50);
+}
+function closeLoginModal() { loginModal.classList.remove('open'); }
+
+document.getElementById('signInBtn').addEventListener('click', openLoginModal);
+document.getElementById('closeLoginBtn').addEventListener('click', closeLoginModal);
+loginModal.addEventListener('click', e => { if (e.target === loginModal) closeLoginModal(); });
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  const errEl = document.getElementById('loginError');
+  const btn   = document.getElementById('loginSubmitBtn');
+
+  errEl.style.display = 'none';
+  if (!email) { errEl.textContent = 'Please enter your email.'; errEl.style.display = ''; return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const password = document.getElementById('loginPassword').value;
+    const body     = { email };
+    if (password) body.password = password;
+    const data = await apiFetch('/auth/login', {
+      method: 'POST',
+      body:   JSON.stringify(body),
+    });
+    localStorage.setItem('bt-user-token', data.token);
+    localStorage.setItem('bt-user', JSON.stringify(data.user));
+    userSession = data.user;
+    updateAuthUI();
+    closeLoginModal();
+    showToast(`Welcome back, ${data.user.name.split(' ')[0]}!`);
+  } catch (err) {
+    if (err.message.includes('No account found')) {
+      errEl.innerHTML = `No account found. <a href="/register.html" style="color:inherit;font-weight:700">Create one →</a>`;
+    } else {
+      errEl.textContent = err.message || 'Sign in failed.';
+    }
+    errEl.style.display = '';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Sign In';
+  }
+});
+
+document.getElementById('userSignOutBtn').addEventListener('click', signOut);
+document.getElementById('formSignOutBtn')?.addEventListener('click', () => {
+  signOut();
+  document.getElementById('bName').value  = '';
+  document.getElementById('bEmail').value = '';
+  document.getElementById('bPhone').value = '';
+});
+
+// ── Profile Modal ────────────────────────────────────────
+const profileModal = document.getElementById('profileModal');
+
+function openProfileModal() {
+  if (!userSession) return;
+  const nameParts = userSession.name.split(' ');
+  document.getElementById('profFirstName').value = nameParts[0] || '';
+  document.getElementById('profLastName').value  = nameParts.slice(1).join(' ') || '';
+  document.getElementById('profEmail').value     = userSession.email;
+  document.getElementById('profPhone').value     = userSession.phone || '';
+  // Populate timezone select, defaulting to stored value or browser tz
+  const tzSel = document.getElementById('profTimezone');
+  populateTzSelect(tzSel, userSession.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  document.getElementById('profileError').style.display = 'none';
+  profileModal.classList.add('open');
+  document.getElementById('profFirstName').focus();
+}
+
+function closeProfileModal() { profileModal.classList.remove('open'); }
+
+document.getElementById('editProfileBtn').addEventListener('click', openProfileModal);
+document.getElementById('closeProfileBtn').addEventListener('click', closeProfileModal);
+document.getElementById('cancelProfileBtn').addEventListener('click', closeProfileModal);
+profileModal.addEventListener('click', e => { if (e.target === profileModal) closeProfileModal(); });
+
+document.getElementById('profileForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const first_name = document.getElementById('profFirstName').value.trim();
+  const last_name  = document.getElementById('profLastName').value.trim();
+  const email      = document.getElementById('profEmail').value.trim();
+  const phone      = document.getElementById('profPhone').value.trim();
+  const timezone   = document.getElementById('profTimezone').value;
+  const errEl      = document.getElementById('profileError');
+  const btn        = document.getElementById('saveProfileBtn');
+
+  errEl.style.display = 'none';
+  if (!first_name) { errEl.textContent = 'First name is required.'; errEl.style.display = 'block'; return; }
+  if (!last_name)  { errEl.textContent = 'Last name is required.';  errEl.style.display = 'block'; return; }
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errEl.textContent = 'A valid email address is required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const token = localStorage.getItem('bt-user-token');
+    const data  = await apiFetch('/auth/profile', {
+      method:  'PUT',
+      headers: { Authorization: 'Bearer ' + token },
+      body:    JSON.stringify({ first_name, last_name, email, phone: phone || undefined, timezone }),
+    });
+
+    // Update stored session
+    localStorage.setItem('bt-user-token', data.token);
+    localStorage.setItem('bt-user', JSON.stringify(data.user));
+    userSession = data.user;
+    updateAuthUI();
+    // Sync calendar timezone to the user's new preference
+    applyUserTimezone(userSession.timezone);
+    closeProfileModal();
+    showToast('Profile updated successfully.');
+  } catch (err) {
+    errEl.textContent   = err.message || 'Could not save profile.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Changes';
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// Bootstrap
+// ════════════════════════════════════════════════════════
+(async () => {
+  try {
+    // Load session, settings, and resources in parallel
+    const [, settings] = await Promise.all([
+      loadUserSession(),
+      apiFetch('/settings').catch(() => ({})),
+      loadResources(),
+    ]);
+    if (settings && settings.require_cancel_code !== undefined) {
+      requireCancelCode = settings.require_cancel_code;
+    }
+    if (settings && settings.ldap_enabled) {
+      ldapEnabled = settings.ldap_enabled === true || settings.ldap_enabled === 'true';
+      document.getElementById('loginPasswordGroup').style.display = ldapEnabled ? '' : 'none';
+      document.getElementById('loginDesc').textContent = ldapEnabled
+        ? 'LDAP users: enter your email and password. Local accounts: email only.'
+        : 'Enter your email address to sign in to your account.';
+    }
+    initCalendar();
+  } catch (err) {
+    showToast('Could not connect to server. Is the backend running?', 'error');
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>

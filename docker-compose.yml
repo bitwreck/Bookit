@@ -1,0 +1,66 @@
+services:
+
+  # ── MariaDB ─────────────────────────────────────────────
+  db:
+    image: mariadb:11
+    container_name: bookit-db
+    restart: unless-stopped
+    environment:
+      # Root password — override via DB_ROOT_PASSWORD in your shell or a .env.docker file
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootsecret}
+      MARIADB_DATABASE:      booking
+      # Internal container credentials — must match the app service below
+      MARIADB_USER:          bookit
+      MARIADB_PASSWORD:      bookitsecret
+    volumes:
+      - db_data:/var/lib/mysql
+      # schema.sql runs automatically on first startup (fresh volume only)
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── App ─────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: bookit-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Database — internal container networking; credentials match the db service above
+      DB_HOST:        db
+      DB_PORT:        3306
+      DB_NAME:        booking
+      DB_USER:        bookit
+      DB_PASSWORD:    bookitsecret
+
+      # Auth — CHANGE THIS before deploying
+      JWT_SECRET:     ${JWT_SECRET:-change_me_to_a_long_random_string}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+
+      # Email (SMTP) — leave SMTP_HOST unset to disable email notifications
+      SMTP_HOST:       ${SMTP_HOST:-}
+      SMTP_PORT:       ${SMTP_PORT:-587}
+      SMTP_SECURE:     ${SMTP_SECURE:-false}
+      SMTP_USER:       ${SMTP_USER:-}
+      SMTP_PASS:       ${SMTP_PASS:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME:  ${SMTP_FROM_NAME:-BookIt}
+
+      # SMS (Twilio) — leave TWILIO_ACCOUNT_SID unset to disable SMS
+      TWILIO_ACCOUNT_SID:  ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN:   ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+
+      NODE_ENV: production
+      PORT:     3000
+
+volumes:
+  db_data:

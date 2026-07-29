@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin – BookIt</title>
+<style>
+/* ── Variables ─────────────────────────────────────────── */
+:root {
+  --bg:         #f8fafc;
+  --surface:    #ffffff;
+  --surface2:   #f1f5f9;
+  --border:     #e2e8f0;
+  --text:       #0f172a;
+  --text-muted: #64748b;
+  --accent:     #475569;
+  --danger:     #ef4444;
+  --success:    #16a34a;
+  --warning:    #d97706;
+  --radius:     10px;
+  --shadow:     0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg:  0 10px 40px rgba(0,0,0,.12);
+}
+[data-theme="dark"] {
+  --bg:         #0f172a;
+  --surface:    #1e293b;
+  --surface2:   #334155;
+  --border:     #334155;
+  --text:       #f1f5f9;
+  --text-muted: #94a3b8;
+}
+
+/* ── Reset ─────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+a{color:inherit;text-decoration:none}
+
+/* ── Login screen ──────────────────────────────────────── */
+.login-screen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:1rem;
+}
+.login-box{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:2.5rem;width:100%;max-width:380px;
+  box-shadow:var(--shadow-lg);
+}
+.login-logo{
+  display:flex;align-items:center;gap:.6rem;
+  font-weight:800;font-size:1.2rem;margin-bottom:1.75rem;
+}
+.login-logo-icon{
+  width:36px;height:36px;background:var(--text);border-radius:9px;
+  display:grid;place-items:center;color:var(--surface);
+}
+.login-title{font-size:1.4rem;font-weight:700;margin-bottom:.35rem}
+.login-sub{color:var(--text-muted);font-size:.875rem;margin-bottom:1.75rem}
+
+/* ── App shell (post-login) ────────────────────────────── */
+.app-shell{display:none;flex-direction:column;min-height:100vh}
+.app-shell.visible{display:flex}
+
+.sidebar-layout{display:grid;grid-template-columns:220px 1fr;flex:1;min-height:0}
+@media(max-width:768px){.sidebar-layout{grid-template-columns:1fr}}
+
+/* ── Top bar ───────────────────────────────────────────── */
+.topbar{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 1.5rem;height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:50;box-shadow:var(--shadow);
+}
+.topbar-logo{display:flex;align-items:center;gap:.5rem;font-weight:700;font-size:1rem}
+.topbar-logo-icon{width:28px;height:28px;background:var(--text);border-radius:6px;display:grid;place-items:center;color:var(--surface)}
+.topbar-right{display:flex;align-items:center;gap:.6rem}
+.admin-chip{
+  font-size:.78rem;font-weight:600;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:99px;padding:.2rem .75rem;
+  color:var(--text-muted);
+}
+
+/* ── Side nav ──────────────────────────────────────────── */
+.sidenav{
+  background:var(--surface);border-right:1px solid var(--border);
+  padding:1.25rem .75rem;
+  display:flex;flex-direction:column;gap:.2rem;
+}
+@media(max-width:768px){.sidenav{display:none}}
+.nav-item{
+  display:flex;align-items:center;gap:.65rem;
+  padding:.55rem .85rem;border-radius:8px;
+  font-size:.875rem;font-weight:600;cursor:pointer;
+  transition:background .15s,color .15s;
+  color:var(--text-muted);user-select:none;
+}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--surface2);color:var(--text)}
+.nav-item svg{flex-shrink:0}
+.nav-divider{height:1px;background:var(--border);margin:.5rem 0}
+
+/* ── Content area ──────────────────────────────────────── */
+.content{padding:1.5rem;overflow-y:auto;flex:1}
+.page{display:none}
+.page.active{display:block}
+
+/* ── Cards ─────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:.875rem;font-weight:700}
+.card-body{padding:1.25rem}
+
+/* ── Stats row ─────────────────────────────────────────── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.25rem;box-shadow:var(--shadow);
+}
+.stat-val{font-size:2rem;font-weight:800;line-height:1}
+.stat-label{font-size:.78rem;color:var(--text-muted);margin-top:.35rem;font-weight:600}
+
+/* ── Table ─────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{padding:.65rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:2px solid var(--border);white-space:nowrap}
+td{padding:.75rem 1rem;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border-radius:7px;font-size:.875rem;font-weight:600;cursor:pointer;border:1px solid transparent;transition:background .15s,opacity .15s;white-space:nowrap}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--text);color:var(--surface);border-color:var(--text)}
+.btn-primary:hover:not(:disabled){opacity:.85}
+.btn-ghost{background:transparent;color:var(--text-muted);border-color:transparent}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-outline{background:transparent;color:var(--text);border-color:var(--border)}
+.btn-outline:hover{background:var(--surface2)}
+.btn-danger{background:var(--danger);color:#fff;border-color:var(--danger)}
+.btn-danger:hover{opacity:.9}
+.btn-sm{padding:.3rem .75rem;font-size:.8rem}
+.btn-icon{padding:.4rem;border-radius:7px;background:transparent;border:1px solid var(--border);color:var(--text-muted);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s}
+.btn-icon:hover{background:var(--surface2);color:var(--text)}
+
+/* ── Forms ─────────────────────────────────────────────── */
+.form-group{display:flex;flex-direction:column;gap:.4rem;margin-bottom:1rem}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+label{font-size:.82rem;font-weight:600;color:var(--text-muted)}
+.form-control{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.55rem .8rem;font-size:.9rem;transition:border-color .15s,box-shadow .15s}
+.form-control:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(71,85,105,.15)}
+select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .8rem center;padding-right:2.2rem;cursor:pointer}
+.form-error{color:var(--danger);font-size:.8rem;display:none}
+.form-error.show{display:block}
+
+/* ── Color swatch ──────────────────────────────────────── */
+.color-row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.color-swatch{
+  width:32px;height:32px;border-radius:6px;cursor:pointer;
+  border:2px solid transparent;transition:transform .12s,border-color .12s;
+  flex-shrink:0;
+}
+.color-swatch.selected{border-color:var(--text);transform:scale(1.1)}
+.color-input-custom{width:40px;height:32px;border:none;padding:0;cursor:pointer;border-radius:6px;background:none}
+
+/* ── Badge ─────────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.75rem;font-weight:700;border-radius:99px;padding:.2rem .65rem}
+.badge-confirmed{background:#dcfce7;color:#15803d}
+.badge-pending{background:#fef9c3;color:#854d0e}
+.badge-cancelled{background:#fee2e2;color:#b91c1c}
+[data-theme="dark"] .badge-confirmed{background:rgba(21,128,61,.2);color:#4ade80}
+[data-theme="dark"] .badge-pending{background:rgba(133,77,14,.2);color:#fbbf24}
+[data-theme="dark"] .badge-cancelled{background:rgba(185,28,28,.2);color:#f87171}
+
+/* ── Resource dot ──────────────────────────────────────── */
+.rdot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
+
+/* ── Modal ─────────────────────────────────────────────── */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-backdrop.open{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border-radius:14px;padding:2rem;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(12px);transition:transform .2s}
+.modal-backdrop.open .modal{transform:translateY(0)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem}
+.modal-title{font-size:1.05rem;font-weight:700}
+.modal-close{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;padding:.2rem;border-radius:5px;transition:color .15s}
+.modal-close:hover{color:var(--text)}
+
+/* ── Toast ─────────────────────────────────────────────── */
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--text);color:var(--surface);padding:.7rem 1.2rem;border-radius:8px;font-size:.875rem;font-weight:600;box-shadow:var(--shadow-lg);opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;z-index:2000;max-width:320px}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.error{background:var(--danger)}
+#toast.success{background:var(--success)}
+
+/* ── Activity log ──────────────────────────────────────── */
+.act-badge {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .75rem; font-weight: 700; border-radius: 99px; padding: .2rem .65rem;
+  white-space: nowrap;
+}
+.act-created   { background: #dcfce7; color: #15803d; }
+.act-cancelled { background: #fee2e2; color: #b91c1c; }
+.act-deleted   { background: #fef3c7; color: #b45309; }
+[data-theme="dark"] .act-created   { background: rgba(21,128,61,.2);  color: #4ade80; }
+[data-theme="dark"] .act-cancelled { background: rgba(185,28,28,.2);  color: #f87171; }
+[data-theme="dark"] .act-deleted   { background: rgba(180,83,9,.2);   color: #fbbf24; }
+
+.pager-btn {
+  min-width: 32px; height: 32px; padding: 0 .5rem;
+  border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text);
+  font-size: .82rem; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.pager-btn:hover:not(:disabled) { background: var(--border); }
+.pager-btn.active { background: var(--text); color: var(--surface); border-color: var(--text); }
+.pager-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Toggle switch ─────────────────────────────────────── */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .85rem 0; border-bottom: 1px solid var(--border);
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-label { font-size: .875rem; font-weight: 600; }
+.toggle-sub   { font-size: .78rem; color: var(--text-muted); margin-top: .15rem; }
+.toggle {
+  position: relative; display: inline-block;
+  width: 42px; height: 24px; flex-shrink: 0;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: var(--border); border-radius: 99px;
+  transition: background .2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute;
+  width: 18px; height: 18px; border-radius: 50%;
+  left: 3px; top: 3px;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  transition: transform .2s;
+}
+.toggle input:checked + .toggle-slider { background: #22c55e; }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+/* ── Confirm dialog ────────────────────────────────────── */
+.confirm-msg{margin-bottom:1.5rem;line-height:1.6;color:var(--text-muted)}
+.confirm-actions{display:flex;gap:.75rem;justify-content:flex-end}
+
+/* ── Empty state ───────────────────────────────────────── */
+.empty{text-align:center;padding:3rem 1rem;color:var(--text-muted)}
+.empty-icon{font-size:2.5rem;margin-bottom:.75rem;opacity:.4}
+.empty-title{font-weight:700;color:var(--text);margin-bottom:.35rem}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+
+/* ── Filter bar ────────────────────────────────────────── */
+.filter-bar{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+.filter-bar input,.filter-bar select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.45rem .75rem;font-size:.85rem}
+.filter-bar input:focus,.filter-bar select:focus{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Login screen -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </div>
+      BookIt Admin
+    </div>
+    <h1 class="login-title">Sign in</h1>
+    <p class="login-sub">Manage resources and appointments</p>
+
+    <form id="loginForm" novalidate>
+      <div class="form-group">
+        <label for="loginUser">Username</label>
+        <input class="form-control" type="text" id="loginUser" autocomplete="username" placeholder="admin" required />
+      </div>
+      <div class="form-group">
+        <label for="loginPass">Password</label>
+        <input class="form-control" type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••" required />
+      </div>
+      <span class="form-error show" id="loginError" style="display:none;margin-bottom:.75rem"></span>
+      <button type="submit" class="btn btn-primary" style="width:100%" id="loginBtn">Sign In</button>
+    </form>
+
+    <p style="margin-top:1.25rem;font-size:.8rem;color:var(--text-muted);text-align:center">
+      Default: <code>admin</code> / <code>Admin1234!</code>
+    </p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- App shell -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="app-shell" id="appShell">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-logo-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </div>
+      BookIt Admin
+    </div>
+    <div class="topbar-right">
+      <span class="admin-chip" id="adminChip"></span>
+      <button class="btn-icon" id="themeToggle" title="Toggle theme">
+        <svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
+      <a href="/index.html" class="btn btn-outline btn-sm">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+        Public View
+      </a>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Main layout -->
+  <div class="sidebar-layout">
+
+    <!-- Sidebar nav -->
+    <nav class="sidenav">
+      <div class="nav-item active" data-page="dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        Dashboard
+      </div>
+      <div class="nav-item" data-page="appointments">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Appointments
+      </div>
+      <div class="nav-item" data-page="resources">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        </svg>
+        Resources
+      </div>
+      <div class="nav-item" data-page="activitylog">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Activity Log
+      </div>
+      <div class="nav-item" data-page="users">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Users
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" data-page="settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </div>
+    </nav>
+
+    <!-- Content -->
+    <main class="content">
+
+      <!-- ── Dashboard ──────────────────────────────── -->
+      <div class="page active" id="page-dashboard">
+        <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1.25rem">Dashboard</h1>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val" id="statTotal">–</div>
+            <div class="stat-label">Total Bookings</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statToday">–</div>
+            <div class="stat-label">Active Today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statUpcoming">–</div>
+            <div class="stat-label">Upcoming (7 days)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statResources">–</div>
+            <div class="stat-label">Resources</div>
+          </div>
+        </div>
+
+        <!-- Recent appointments -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Recent Bookings</span>
+            <button class="btn btn-outline btn-sm" onclick="showPage('appointments')">View All</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Resource</th>
+                  <th>Start</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="recentTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Appointments ────────────────────────────── -->
+      <div class="page" id="page-appointments">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+          <h1 style="font-size:1.4rem;font-weight:800">Appointments</h1>
+        </div>
+
+        <div class="filter-bar">
+          <input type="text" id="apptSearch" placeholder="Search title or name…" style="flex:1;min-width:160px" />
+          <select id="apptFilterResource">
+            <option value="">All resources</option>
+          </select>
+          <select id="apptFilterStatus">
+            <option value="">All statuses</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="pending">Pending</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Title</th>
+                  <th>Resource</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Booked By</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="apptTable"></tbody>
+            </table>
+          </div>
+          <div id="apptEmpty" class="empty" style="display:none">
+            <div class="empty-icon">📅</div>
+            <div class="empty-title">No appointments found</div>
+            <p>Try adjusting your filters.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Resources ──────────────────────────────── -->
+      <div class="page" id="page-resources">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+          <h1 style="font-size:1.4rem;font-weight:800">Resources</h1>
+          <button class="btn btn-primary btn-sm" id="addResourceBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Resource
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Color</th>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Bookings</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="resourceTable"></tbody>
+            </table>
+          </div>
+          <div id="resourceEmpty" class="empty" style="display:none">
+            <div class="empty-icon">📦</div>
+            <div class="empty-title">No resources yet</div>
+            <p>Add your first resource above.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Settings ───────────────────────────────── -->
+      <!-- ── Activity Log ──────────────────────────────── -->
+      <div class="page" id="page-activitylog">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+          <h1 style="font-size:1.4rem;font-weight:800">Activity Log</h1>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <label style="font-size:.82rem;font-weight:600;color:var(--text-muted)">Per page</label>
+            <select id="actLogLimit" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem">
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="75">75</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Booking</th>
+                  <th>Resource</th>
+                  <th>Actor</th>
+                  <th>IP Address</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody id="actLogTable"></tbody>
+            </table>
+          </div>
+          <div id="actLogEmpty" class="empty" style="display:none">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">No activity logged yet</div>
+            <p>Events will appear here as bookings are created, cancelled, or deleted.</p>
+          </div>
+
+          <!-- Pagination bar -->
+          <div id="actLogPager" style="display:none;padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+            <span id="actLogMeta" style="font-size:.82rem;color:var(--text-muted)"></span>
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap" id="actLogPages"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Users ──────────────────────────────────────── -->
+      <div class="page" id="page-users">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+          <h1 style="font-size:1.4rem;font-weight:800">Registered Users</h1>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <label style="font-size:.82rem;font-weight:600;color:var(--text-muted)">Per page</label>
+            <select id="usersLimit" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem">
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="75">75</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Auth</th>
+                  <th>Bookings</th>
+                  <th>Registered</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable"></tbody>
+            </table>
+          </div>
+          <div id="usersEmpty" class="empty" style="display:none">
+            <div class="empty-icon">👤</div>
+            <div class="empty-title">No users yet</div>
+            <p>Users are registered automatically when they make a booking.</p>
+          </div>
+          <div id="usersPager" style="display:none;padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+            <span id="usersMeta" style="font-size:.82rem;color:var(--text-muted)"></span>
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap" id="usersPages"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-settings">
+        <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1.25rem">Settings</h1>
+
+        <!-- Booking behaviour -->
+        <div class="card" style="max-width:560px;margin-bottom:1.25rem">
+          <div class="card-head"><span class="card-title">Booking Behaviour</span></div>
+          <div class="card-body">
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Require cancellation verification code</div>
+                <div class="toggle-sub">When on, users must enter a 6-digit code sent to their email (and phone) to cancel. When off, matching the booking email is enough.</div>
+              </div>
+              <label class="toggle" style="margin-left:1.25rem">
+                <input type="checkbox" id="settingCancelCode" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- LDAP Authentication -->
+        <div class="card" style="max-width:560px;margin-bottom:1.25rem">
+          <div class="card-head"><span class="card-title">LDAP Authentication</span></div>
+          <div class="card-body">
+
+            <div class="toggle-row" style="margin-bottom:1rem">
+              <div>
+                <div class="toggle-label">Enable LDAP login</div>
+                <div class="toggle-sub">When on, users can log in with their directory credentials. Local (email-only) accounts continue to work alongside LDAP users.</div>
+              </div>
+              <label class="toggle" style="margin-left:1.25rem">
+                <input type="checkbox" id="settingLdapEnabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div id="ldapFields">
+              <div class="form-group">
+                <label for="ldapUrl">Server URL</label>
+                <input class="form-control" type="text" id="ldapUrl" placeholder="ldap://192.168.1.10:389" />
+              </div>
+              <div class="form-group">
+                <label for="ldapBaseDn">Base DN</label>
+                <input class="form-control" type="text" id="ldapBaseDn" placeholder="dc=company,dc=com" />
+              </div>
+              <div class="form-group">
+                <label for="ldapBindDn">Bind DN <span style="font-weight:400;color:var(--text-muted)">(service account)</span></label>
+                <input class="form-control" type="text" id="ldapBindDn" placeholder="cn=admin,dc=company,dc=com" />
+              </div>
+              <div class="form-group">
+                <label for="ldapBindPass">Bind Password</label>
+                <input class="form-control" type="password" id="ldapBindPass" placeholder="Leave blank to keep existing" autocomplete="new-password" />
+              </div>
+              <div class="form-group">
+                <label for="ldapUserFilter">User Search Filter</label>
+                <input class="form-control" type="text" id="ldapUserFilter" placeholder="(mail={{username}})" />
+                <span style="font-size:.75rem;color:var(--text-muted);margin-top:.25rem;display:block">Use <code>{{username}}</code> as the email placeholder. For Active Directory try <code>(userPrincipalName={{username}})</code>.</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
+                <div class="form-group">
+                  <label for="ldapNameAttr">Name Attribute</label>
+                  <input class="form-control" type="text" id="ldapNameAttr" placeholder="cn" />
+                </div>
+                <div class="form-group">
+                  <label for="ldapEmailAttr">Email Attribute</label>
+                  <input class="form-control" type="text" id="ldapEmailAttr" placeholder="mail" />
+                </div>
+                <div class="form-group">
+                  <label for="ldapPhoneAttr">Phone Attribute <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+                  <input class="form-control" type="text" id="ldapPhoneAttr" placeholder="telephoneNumber" />
+                </div>
+              </div>
+
+              <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.25rem">
+                <button class="btn btn-outline" id="ldapTestBtn" type="button">Test Connection</button>
+                <button class="btn btn-primary" id="ldapSaveBtn" type="button">Save LDAP Settings</button>
+              </div>
+              <div id="ldapTestResult" style="margin-top:.65rem;font-size:.83rem;display:none"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="card" style="max-width:560px">
+          <div class="card-head"><span class="card-title">Change Password</span></div>
+          <div class="card-body">
+            <form id="pwForm" novalidate>
+              <div class="form-group">
+                <label for="pwNew">New Password</label>
+                <input class="form-control" type="password" id="pwNew" placeholder="At least 8 characters" minlength="8" required />
+              </div>
+              <div class="form-group">
+                <label for="pwConfirm">Confirm Password</label>
+                <input class="form-control" type="password" id="pwConfirm" placeholder="Repeat password" required />
+              </div>
+              <span class="form-error" id="pwError" style="display:none;margin-bottom:.75rem"></span>
+              <button type="submit" class="btn btn-primary">Update Password</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Resource Modal -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="resourceModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="resourceModalTitle">Add Resource</h2>
+      <button class="modal-close" id="closeResourceModal">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <form id="resourceForm" novalidate>
+      <input type="hidden" id="rId" />
+      <div class="form-group">
+        <label for="rName">Name *</label>
+        <input class="form-control" type="text" id="rName" placeholder="e.g. Camera A" required />
+        <span class="form-error show" id="errRName" style="display:none">Name is required.</span>
+      </div>
+      <div class="form-group">
+        <label for="rDesc">Description</label>
+        <input class="form-control" type="text" id="rDesc" placeholder="Brief description (optional)" />
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <div class="color-row" id="colorSwatches"></div>
+        <input type="hidden" id="rColor" value="#64748b" />
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:.5rem">
+        <button type="button" class="btn btn-outline" id="cancelResourceModal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="saveResourceBtn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Edit Appointment Modal -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="apptModal">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h2 class="modal-title">Edit Appointment</h2>
+      <button class="modal-close" id="closeApptModal">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <form id="apptEditForm" novalidate>
+      <input type="hidden" id="aId" />
+      <div class="form-group">
+        <label for="aTitle">Title</label>
+        <input class="form-control" type="text" id="aTitle" required />
+      </div>
+      <div class="form-group">
+        <label for="aDesc">Description</label>
+        <textarea class="form-control" id="aDesc" rows="2" style="resize:vertical"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="aStart">Start</label>
+          <input class="form-control" type="datetime-local" id="aStart" />
+        </div>
+        <div class="form-group">
+          <label for="aEnd">End</label>
+          <input class="form-control" type="datetime-local" id="aEnd" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="aName">Booked By</label>
+          <input class="form-control" type="text" id="aName" />
+        </div>
+        <div class="form-group">
+          <label for="aEmail">Email</label>
+          <input class="form-control" type="email" id="aEmail" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="aStatus">Status</label>
+        <select class="form-control" id="aStatus">
+          <option value="confirmed">Confirmed</option>
+          <option value="pending">Pending</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end">
+        <button type="button" class="btn btn-outline" id="cancelApptModal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Confirm delete modal -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="confirmTitle">Confirm Delete</h2>
+      <button class="modal-close" id="closeConfirmModal">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <p class="confirm-msg" id="confirmMsg"></p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline" id="cancelConfirm">Cancel</button>
+      <button class="btn btn-danger" id="okConfirm">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// Auth & State
+// ════════════════════════════════════════════════════════
+const API = '/api';
+let token     = localStorage.getItem('bt-admin-token') || '';
+let resources = [];
+let appointments = [];
+
+const COLORS = [
+  '#ef4444','#f97316','#f59e0b','#eab308',
+  '#84cc16','#22c55e','#10b981','#14b8a6',
+  '#06b6d4','#0ea5e9','#3b82f6','#6366f1',
+  '#8b5cf6','#a855f7','#ec4899','#64748b',
+];
+
+// ── Theme ────────────────────────────────────────────────
+const html = document.documentElement;
+const MOON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+const SUN  = document.getElementById('themeIcon').outerHTML;
+
+function applyTheme(t) {
+  html.dataset.theme = t;
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.innerHTML = t === 'dark' ? MOON : SUN;
+  localStorage.setItem('bt-theme', t);
+}
+document.getElementById('themeToggle').addEventListener('click', () =>
+  applyTheme(html.dataset.theme === 'dark' ? 'light' : 'dark')
+);
+applyTheme(localStorage.getItem('bt-theme') || 'light');
+
+// ── Toast ────────────────────────────────────────────────
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function toast(msg, type = 'info') {
+  toastEl.textContent = msg;
+  toastEl.className   = 'show' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.className = '', 3500);
+}
+
+// ── API ──────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      ...(opts.headers || {}),
+    },
+    ...opts,
+  });
+  if (res.status === 401) { doLogout(); return; }
+
+  // Safely parse — server might return HTML on unexpected errors
+  let data;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error (${res.status}): unexpected response format`); }
+  }
+
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+// ════════════════════════════════════════════════════════
+// Login / Logout
+// ════════════════════════════════════════════════════════
+const loginScreen = document.getElementById('loginScreen');
+const appShell    = document.getElementById('appShell');
+
+function showApp(username) {
+  loginScreen.style.display = 'none';
+  appShell.classList.add('visible');
+  document.getElementById('adminChip').textContent = username;
+  loadAll();
+}
+
+function doLogout() {
+  token = '';
+  localStorage.removeItem('bt-admin-token');
+  location.reload();
+}
+
+document.getElementById('logoutBtn').addEventListener('click', doLogout);
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const errEl    = document.getElementById('loginError');
+  const btn      = document.getElementById('loginBtn');
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const data = await api('/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    token = data.token;
+    localStorage.setItem('bt-admin-token', token);
+    showApp(data.username);
+  } catch (err) {
+    errEl.textContent    = err.message || 'Login failed';
+    errEl.style.display  = 'block';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Sign In';
+  }
+});
+
+// Auto-login if token exists
+if (token) {
+  // Validate token by hitting a protected endpoint
+  api('/resources').then(() => {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    showApp(payload.username);
+  }).catch(() => doLogout());
+}
+
+// ════════════════════════════════════════════════════════
+// Navigation
+// ════════════════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name)?.classList.add('active');
+  document.querySelector(`.nav-item[data-page="${name}"]`)?.classList.add('active');
+  if (name === 'activitylog') { actLogPage = 1; loadActivityLog(); }
+  if (name === 'users')       { usersPage  = 1; loadUsers(); }
+  if (name === 'settings')    { loadSettings(); }
+}
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => showPage(el.dataset.page));
+});
+
+// ════════════════════════════════════════════════════════
+// Load all data
+// ════════════════════════════════════════════════════════
+async function loadAll() {
+  await Promise.all([loadResources(), loadAppointments()]);
+  renderDashboard();
+}
+
+async function loadResources() {
+  resources = await api('/resources');
+  renderResourceTable();
+  renderResourceFilter();
+}
+
+async function loadAppointments() {
+  appointments = await api('/appointments?status=all&start=2000-01-01&end=2099-01-01');
+  renderApptTable();
+}
+
+// ════════════════════════════════════════════════════════
+// Dashboard
+// ════════════════════════════════════════════════════════
+function renderDashboard() {
+  const now    = new Date();
+  const todayS = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayE = new Date(todayS.getTime() + 86400000);
+  const week   = new Date(todayE.getTime() + 6 * 86400000);
+
+  const total    = appointments.filter(a => a.status !== 'cancelled').length;
+  const today    = appointments.filter(a => {
+    const s = new Date(a.start_time), e = new Date(a.end_time);
+    return a.status !== 'cancelled' && s < todayE && e > todayS;
+  }).length;
+  const upcoming = appointments.filter(a => {
+    const s = new Date(a.start_time);
+    return a.status !== 'cancelled' && s >= todayS && s <= week;
+  }).length;
+
+  document.getElementById('statTotal').textContent     = total;
+  document.getElementById('statToday').textContent     = today;
+  document.getElementById('statUpcoming').textContent  = upcoming;
+  document.getElementById('statResources').textContent = resources.length;
+
+  const recent = [...appointments]
+    .filter(a => a.status !== 'cancelled')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 8);
+
+  const tbody = document.getElementById('recentTable');
+  tbody.innerHTML = recent.map(a => `
+    <tr>
+      <td>${a.title}</td>
+      <td><span class="rdot" style="background:${a.resource_color}"></span> ${a.resource_name}</td>
+      <td style="white-space:nowrap">${fmtDt(a.start_time)}</td>
+      <td><span class="badge badge-${a.status}">${a.status}</span></td>
+    </tr>
+  `).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">No bookings yet</td></tr>`;
+}
+
+// ════════════════════════════════════════════════════════
+// Appointments table
+// ════════════════════════════════════════════════════════
+function renderResourceFilter() {
+  const sel = document.getElementById('apptFilterResource');
+  sel.innerHTML = '<option value="">All resources</option>';
+  resources.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.name;
+    sel.appendChild(opt);
+  });
+}
+
+function renderApptTable(filter = {}) {
+  let rows = [...appointments];
+
+  const q   = (filter.q   || document.getElementById('apptSearch').value.trim()).toLowerCase();
+  const rid = (filter.rid !== undefined ? filter.rid : document.getElementById('apptFilterResource').value);
+  const st  = (filter.st  !== undefined ? filter.st  : document.getElementById('apptFilterStatus').value);
+
+  if (q)   rows = rows.filter(a => a.title?.toLowerCase().includes(q) || a.booked_by_name?.toLowerCase().includes(q));
+  if (rid) rows = rows.filter(a => String(a.resource_id) === String(rid));
+  if (st)  rows = rows.filter(a => a.status === st);
+
+  rows.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+
+  const tbody = document.getElementById('apptTable');
+  const empty = document.getElementById('apptEmpty');
+
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = rows.map(a => `
+    <tr>
+      <td style="color:var(--text-muted)">${a.id}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.title}</td>
+      <td><span class="rdot" style="background:${a.resource_color}"></span> ${a.resource_name}</td>
+      <td style="white-space:nowrap">${fmtDt(a.start_time)}</td>
+      <td style="white-space:nowrap">${fmtDt(a.end_time)}</td>
+      <td>${a.booked_by_name}<br><span style="font-size:.75rem;color:var(--text-muted)">${a.booked_by_email}</span></td>
+      <td><span class="badge badge-${a.status}">${a.status}</span></td>
+      <td style="white-space:nowrap">
+        <a href="/api/appointments/${a.id}/ics" download="booking-${a.id}.ics" class="btn-icon" title="Download ICS" style="margin-right:4px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <button class="btn-icon" onclick="editAppt(${a.id})" title="Edit" style="margin-right:4px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="btn-icon" onclick="deleteAppt(${a.id},'${a.title.replace(/'/g,"\\'")}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+['apptSearch','apptFilterResource','apptFilterStatus'].forEach(id =>
+  document.getElementById(id)?.addEventListener('input', () => renderApptTable())
+);
+
+// ── Edit appointment ─────────────────────────────────────
+function editAppt(id) {
+  const a = appointments.find(x => x.id === id);
+  if (!a) return;
+
+  document.getElementById('aId').value    = a.id;
+  document.getElementById('aTitle').value = a.title;
+  document.getElementById('aDesc').value  = a.description || '';
+  document.getElementById('aStart').value = toInputDt(a.start_time);
+  document.getElementById('aEnd').value   = toInputDt(a.end_time);
+  document.getElementById('aName').value  = a.booked_by_name;
+  document.getElementById('aEmail').value = a.booked_by_email;
+  document.getElementById('aStatus').value = a.status;
+
+  document.getElementById('apptModal').classList.add('open');
+}
+
+document.getElementById('apptEditForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('aId').value;
+  const payload = {
+    title:           document.getElementById('aTitle').value,
+    description:     document.getElementById('aDesc').value,
+    start_time:      document.getElementById('aStart').value,
+    end_time:        document.getElementById('aEnd').value,
+    booked_by_name:  document.getElementById('aName').value,
+    booked_by_email: document.getElementById('aEmail').value,
+    status:          document.getElementById('aStatus').value,
+  };
+  try {
+    await api(`/appointments/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    document.getElementById('apptModal').classList.remove('open');
+    await loadAppointments();
+    renderDashboard();
+    toast('Appointment updated', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+// ── Delete appointment ───────────────────────────────────
+function deleteAppt(id, title) {
+  openConfirm(
+    'Delete Appointment',
+    `Delete "<strong>${title}</strong>"? This cannot be undone.`,
+    async () => {
+      await api(`/appointments/${id}`, { method: 'DELETE' });
+      await loadAppointments();
+      renderDashboard();
+      loadActivityLog();
+      toast('Appointment deleted');
+    }
+  );
+}
+
+document.getElementById('closeApptModal').addEventListener('click', () =>
+  document.getElementById('apptModal').classList.remove('open')
+);
+document.getElementById('cancelApptModal').addEventListener('click', () =>
+  document.getElementById('apptModal').classList.remove('open')
+);
+
+// ════════════════════════════════════════════════════════
+// Resources
+// ════════════════════════════════════════════════════════
+function renderResourceTable() {
+  const tbody = document.getElementById('resourceTable');
+  const empty = document.getElementById('resourceEmpty');
+
+  if (!resources.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = resources.map(r => {
+    const bookings = appointments.filter(a => a.resource_id === r.id && a.status !== 'cancelled').length;
+    return `
+      <tr>
+        <td><span class="rdot" style="background:${r.color};width:18px;height:18px;border-radius:4px"></span></td>
+        <td style="font-weight:600">${r.name}</td>
+        <td style="color:var(--text-muted)">${r.description || '–'}</td>
+        <td>${bookings}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-icon" onclick="editResource(${r.id})" title="Edit" style="margin-right:4px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="deleteResource(${r.id},'${r.name.replace(/'/g,"\\'")}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Color swatches ───────────────────────────────────────
+function renderSwatches(selectedColor) {
+  const wrap = document.getElementById('colorSwatches');
+  wrap.innerHTML = '';
+  COLORS.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'color-swatch' + (c === selectedColor ? ' selected' : '');
+    div.style.background = c;
+    div.title = c;
+    div.addEventListener('click', () => {
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+      div.classList.add('selected');
+      document.getElementById('rColor').value = c;
+    });
+    wrap.appendChild(div);
+  });
+
+  // Custom color picker
+  const picker = document.createElement('input');
+  picker.type       = 'color';
+  picker.className  = 'color-input-custom';
+  picker.title      = 'Custom color';
+  picker.value      = selectedColor;
+  picker.addEventListener('input', () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    document.getElementById('rColor').value = picker.value;
+  });
+  wrap.appendChild(picker);
+}
+
+// ── Add resource ─────────────────────────────────────────
+document.getElementById('addResourceBtn').addEventListener('click', () => {
+  document.getElementById('rId').value   = '';
+  document.getElementById('rName').value = '';
+  document.getElementById('rDesc').value = '';
+  document.getElementById('rColor').value = '#64748b';
+  document.getElementById('resourceModalTitle').textContent = 'Add Resource';
+  document.getElementById('errRName').style.display = 'none';
+  renderSwatches('#64748b');
+  document.getElementById('resourceModal').classList.add('open');
+});
+
+function editResource(id) {
+  const r = resources.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('rId').value   = r.id;
+  document.getElementById('rName').value = r.name;
+  document.getElementById('rDesc').value = r.description || '';
+  document.getElementById('rColor').value = r.color;
+  document.getElementById('resourceModalTitle').textContent = 'Edit Resource';
+  document.getElementById('errRName').style.display = 'none';
+  renderSwatches(r.color);
+  document.getElementById('resourceModal').classList.add('open');
+}
+
+document.getElementById('resourceForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id    = document.getElementById('rId').value;
+  const name  = document.getElementById('rName').value.trim();
+  const errEl = document.getElementById('errRName');
+
+  if (!name) { errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+
+  const payload = {
+    name,
+    description: document.getElementById('rDesc').value.trim() || null,
+    color:       document.getElementById('rColor').value,
+  };
+
+  try {
+    if (id) {
+      await api(`/resources/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      toast('Resource updated', 'success');
+    } else {
+      await api('/resources', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Resource added', 'success');
+    }
+    document.getElementById('resourceModal').classList.remove('open');
+    await loadAll();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+function deleteResource(id, name) {
+  openConfirm(
+    'Delete Resource',
+    `Delete resource "<strong>${name}</strong>"? All associated appointments will also be deleted.`,
+    async () => {
+      await api(`/resources/${id}`, { method: 'DELETE' });
+      await loadAll();
+      toast('Resource deleted');
+    }
+  );
+}
+
+[document.getElementById('closeResourceModal'),
+ document.getElementById('cancelResourceModal')].forEach(btn =>
+  btn?.addEventListener('click', () =>
+    document.getElementById('resourceModal').classList.remove('open')
+  )
+);
+
+// ════════════════════════════════════════════════════════
+// Settings
+// ════════════════════════════════════════════════════════
+async function loadSettings() {
+  try {
+    const s = await api('/settings');
+    document.getElementById('settingCancelCode').checked = s.require_cancel_code;
+
+    // LDAP fields
+    const enabled = s.ldap_enabled === true || s.ldap_enabled === 'true';
+    document.getElementById('settingLdapEnabled').checked = enabled;
+    document.getElementById('ldapFields').style.display   = enabled ? '' : 'none';
+    document.getElementById('ldapUrl').value         = s.ldap_url         || '';
+    document.getElementById('ldapBaseDn').value      = s.ldap_base_dn     || '';
+    document.getElementById('ldapBindDn').value      = s.ldap_bind_dn     || '';
+    // bind password intentionally left blank on load (masked)
+    document.getElementById('ldapUserFilter').value  = s.ldap_user_filter || '(mail={{username}})';
+    document.getElementById('ldapNameAttr').value    = s.ldap_name_attr   || 'cn';
+    document.getElementById('ldapEmailAttr').value   = s.ldap_email_attr  || 'mail';
+    document.getElementById('ldapPhoneAttr').value   = s.ldap_phone_attr  || 'telephoneNumber';
+  } catch (err) {
+    toast('Could not load settings', 'error');
+  }
+}
+
+// Show/hide LDAP field group when toggle changes
+document.getElementById('settingLdapEnabled').addEventListener('change', e => {
+  document.getElementById('ldapFields').style.display = e.target.checked ? '' : 'none';
+});
+
+// Save LDAP settings
+document.getElementById('ldapSaveBtn').addEventListener('click', async () => {
+  const btn      = document.getElementById('ldapSaveBtn');
+  const enabled  = document.getElementById('settingLdapEnabled').checked;
+  const bindPass = document.getElementById('ldapBindPass').value;
+
+  const payload = {
+    ldap_enabled:     enabled,
+    ldap_url:         document.getElementById('ldapUrl').value.trim(),
+    ldap_base_dn:     document.getElementById('ldapBaseDn').value.trim(),
+    ldap_bind_dn:     document.getElementById('ldapBindDn').value.trim(),
+    ldap_user_filter: document.getElementById('ldapUserFilter').value.trim(),
+    ldap_name_attr:   document.getElementById('ldapNameAttr').value.trim(),
+    ldap_email_attr:  document.getElementById('ldapEmailAttr').value.trim(),
+    ldap_phone_attr:  document.getElementById('ldapPhoneAttr').value.trim(),
+  };
+  // Only send password if the admin typed something (blank = keep existing)
+  if (bindPass) payload.ldap_bind_pass = bindPass;
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await api('/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    document.getElementById('ldapBindPass').value = '';  // clear after save
+    toast('LDAP settings saved', 'success');
+  } catch (err) {
+    toast(err.message || 'Could not save LDAP settings', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save LDAP Settings';
+  }
+});
+
+// Test LDAP connection
+document.getElementById('ldapTestBtn').addEventListener('click', async () => {
+  const btn    = document.getElementById('ldapTestBtn');
+  const result = document.getElementById('ldapTestResult');
+  result.style.display = 'none';
+
+  btn.disabled = true; btn.textContent = 'Testing…';
+  try {
+    const data = await api('/auth/ldap-test', {
+      method: 'POST',
+      body: JSON.stringify({
+        url:       document.getElementById('ldapUrl').value.trim(),
+        bind_dn:   document.getElementById('ldapBindDn').value.trim(),
+        bind_pass: document.getElementById('ldapBindPass').value,
+        base_dn:   document.getElementById('ldapBaseDn').value.trim(),
+      }),
+    });
+    result.style.cssText = 'display:block;color:#16a34a';
+    result.textContent   = '✓ ' + data.message;
+  } catch (err) {
+    result.style.cssText = 'display:block;color:#dc2626';
+    result.textContent   = '✗ ' + (err.message || 'Connection failed');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Test Connection';
+  }
+});
+
+document.getElementById('settingCancelCode').addEventListener('change', async (e) => {
+  try {
+    await api('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ require_cancel_code: e.target.checked }),
+    });
+    toast(e.target.checked
+      ? 'Cancellation codes enabled'
+      : 'Cancellation codes disabled — email match only', 'success');
+  } catch (err) {
+    // Revert toggle on failure
+    e.target.checked = !e.target.checked;
+    toast(err.message || 'Could not save setting', 'error');
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// Settings – password change
+// ════════════════════════════════════════════════════════
+document.getElementById('pwForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pw1   = document.getElementById('pwNew').value;
+  const pw2   = document.getElementById('pwConfirm').value;
+  const errEl = document.getElementById('pwError');
+
+  if (pw1 !== pw2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (pw1.length < 8) {
+    errEl.textContent = 'Password must be at least 8 characters.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  try {
+    await api('/admin/password', { method: 'PUT', body: JSON.stringify({ newPassword: pw1 }) });
+    document.getElementById('pwForm').reset();
+    toast('Password updated', 'success');
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// Confirm modal
+// ════════════════════════════════════════════════════════
+let confirmCb = null;
+
+function openConfirm(title, msg, cb) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').innerHTML     = msg;
+  confirmCb = cb;
+  document.getElementById('confirmModal').classList.add('open');
+}
+
+document.getElementById('okConfirm').addEventListener('click', async () => {
+  document.getElementById('confirmModal').classList.remove('open');
+  try { await confirmCb?.(); } catch (err) { toast(err.message, 'error'); }
+  confirmCb = null;
+});
+[document.getElementById('cancelConfirm'),
+ document.getElementById('closeConfirmModal')].forEach(btn =>
+  btn?.addEventListener('click', () => {
+    document.getElementById('confirmModal').classList.remove('open');
+    confirmCb = null;
+  })
+);
+
+// ════════════════════════════════════════════════════════
+// Activity Log
+// ════════════════════════════════════════════════════════
+let actLogPage  = 1;
+let actLogLimit = 25;
+
+const ACT_LABELS = {
+  created:   { label: 'Created',   cls: 'act-created'   },
+  cancelled: { label: 'Cancelled', cls: 'act-cancelled' },
+  deleted:   { label: 'Deleted',   cls: 'act-deleted'   },
+};
+
+async function loadActivityLog() {
+  const tbody  = document.getElementById('actLogTable');
+  const empty  = document.getElementById('actLogEmpty');
+  const pager  = document.getElementById('actLogPager');
+  const meta   = document.getElementById('actLogMeta');
+  const pages  = document.getElementById('actLogPages');
+
+  try {
+    const res = await api(`/activity?limit=${actLogLimit}&page=${actLogPage}`);
+    const { total, page, limit, pages: totalPages, data } = res;
+
+    if (!data.length && page === 1) {
+      tbody.innerHTML = '';
+      empty.style.display  = '';
+      pager.style.display  = 'none';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    tbody.innerHTML = data.map(e => {
+      const info = ACT_LABELS[e.action] || { label: e.action, cls: '' };
+      return `
+        <tr>
+          <td><span class="act-badge ${info.cls}">${info.label}</span></td>
+          <td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.appointment_title}</td>
+          <td>
+            <span style="display:inline-flex;align-items:center;gap:.4rem">
+              <span style="width:10px;height:10px;border-radius:50%;background:${e.resource_color};flex-shrink:0;display:inline-block"></span>
+              ${e.resource_name}
+            </span>
+          </td>
+          <td style="color:var(--text-muted);font-size:.82rem">${e.actor || '—'}</td>
+          <td style="color:var(--text-muted);font-size:.78rem;font-family:monospace">${e.ip_address || '—'}</td>
+          <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${fmtDt(e.created_at)}</td>
+        </tr>`;
+    }).join('');
+
+    // Pagination bar
+    const from = (page - 1) * limit + 1;
+    const to   = Math.min(page * limit, total);
+    meta.textContent = `Showing ${from}–${to} of ${total} events`;
+
+    // Build page buttons (show max 7 around current page)
+    const btns = [];
+    // Prev
+    btns.push(`<button class="pager-btn" onclick="gotoActPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>‹</button>`);
+
+    const delta = 2;
+    let start = Math.max(1, page - delta);
+    let end   = Math.min(totalPages, page + delta);
+    if (start > 1) {
+      btns.push(`<button class="pager-btn" onclick="gotoActPage(1)">1</button>`);
+      if (start > 2) btns.push(`<span style="padding:0 .25rem;color:var(--text-muted)">…</span>`);
+    }
+    for (let i = start; i <= end; i++) {
+      btns.push(`<button class="pager-btn${i === page ? ' active' : ''}" onclick="gotoActPage(${i})">${i}</button>`);
+    }
+    if (end < totalPages) {
+      if (end < totalPages - 1) btns.push(`<span style="padding:0 .25rem;color:var(--text-muted)">…</span>`);
+      btns.push(`<button class="pager-btn" onclick="gotoActPage(${totalPages})">${totalPages}</button>`);
+    }
+    // Next
+    btns.push(`<button class="pager-btn" onclick="gotoActPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>›</button>`);
+
+    pages.innerHTML = btns.join('');
+    pager.style.display = total > limit ? 'flex' : 'none';
+
+  } catch (err) {
+    toast(err.message || 'Failed to load activity log', 'error');
+  }
+}
+
+function gotoActPage(p) {
+  actLogPage = p;
+  loadActivityLog();
+}
+
+document.getElementById('actLogLimit')?.addEventListener('change', e => {
+  actLogLimit = parseInt(e.target.value);
+  actLogPage  = 1;
+  loadActivityLog();
+});
+
+// ════════════════════════════════════════════════════════
+// Users
+// ════════════════════════════════════════════════════════
+let usersPage  = 1;
+let usersLimit = 25;
+
+async function loadUsers() {
+  const tbody = document.getElementById('usersTable');
+  const empty = document.getElementById('usersEmpty');
+  const pager = document.getElementById('usersPager');
+  const meta  = document.getElementById('usersMeta');
+  const pages = document.getElementById('usersPages');
+
+  try {
+    const res = await api(`/users?limit=${usersLimit}&page=${usersPage}`);
+    const { total, page, limit, pages: totalPages, data } = res;
+
+    if (!data.length && page === 1) {
+      tbody.innerHTML     = '';
+      empty.style.display = '';
+      pager.style.display = 'none';
+      return;
+    }
+
+    empty.style.display = 'none';
+    tbody.innerHTML = data.map(u => `
+      <tr>
+        <td style="color:var(--text-muted)">${u.id}</td>
+        <td style="font-weight:600">${u.name}</td>
+        <td style="color:var(--text-muted);font-size:.85rem">${u.email}</td>
+        <td style="color:var(--text-muted);font-size:.85rem">${u.phone || '—'}</td>
+        <td>
+          <span style="font-size:.72rem;font-weight:700;padding:2px 7px;border-radius:99px;
+            background:${u.auth_source === 'ldap' ? '#dbeafe' : 'var(--surface2)'};
+            color:${u.auth_source === 'ldap' ? '#1d4ed8' : 'var(--text-muted)'}">
+            ${(u.auth_source || 'local').toUpperCase()}
+          </span>
+        </td>
+        <td>
+          <span style="display:inline-flex;align-items:center;justify-content:center;
+            min-width:24px;height:24px;border-radius:99px;
+            background:var(--surface2);border:1px solid var(--border);
+            font-size:.78rem;font-weight:700;color:var(--text);padding:0 .5rem">
+            ${u.booking_count}
+          </span>
+        </td>
+        <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${fmtDt(u.created_at)}</td>
+      </tr>
+    `).join('');
+
+    // Pagination
+    const from = (page - 1) * limit + 1;
+    const to   = Math.min(page * limit, total);
+    meta.textContent = `Showing ${from}–${to} of ${total} users`;
+
+    const btns = [];
+    btns.push(`<button class="pager-btn" onclick="gotoUsersPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>‹</button>`);
+    const delta = 2;
+    let start = Math.max(1, page - delta);
+    let end   = Math.min(totalPages, page + delta);
+    if (start > 1) {
+      btns.push(`<button class="pager-btn" onclick="gotoUsersPage(1)">1</button>`);
+      if (start > 2) btns.push(`<span style="padding:0 .25rem;color:var(--text-muted)">…</span>`);
+    }
+    for (let i = start; i <= end; i++) {
+      btns.push(`<button class="pager-btn${i === page ? ' active' : ''}" onclick="gotoUsersPage(${i})">${i}</button>`);
+    }
+    if (end < totalPages) {
+      if (end < totalPages - 1) btns.push(`<span style="padding:0 .25rem;color:var(--text-muted)">…</span>`);
+      btns.push(`<button class="pager-btn" onclick="gotoUsersPage(${totalPages})">${totalPages}</button>`);
+    }
+    btns.push(`<button class="pager-btn" onclick="gotoUsersPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>›</button>`);
+
+    pages.innerHTML = btns.join('');
+    pager.style.display = total > limit ? 'flex' : 'none';
+
+  } catch (err) {
+    toast(err.message || 'Failed to load users', 'error');
+  }
+}
+
+function gotoUsersPage(p) {
+  usersPage = p;
+  loadUsers();
+}
+
+document.getElementById('usersLimit')?.addEventListener('change', e => {
+  usersLimit = parseInt(e.target.value);
+  usersPage  = 1;
+  loadUsers();
+});
+
+// ════════════════════════════════════════════════════════
+// Utilities
+// ════════════════════════════════════════════════════════
+function fmtDt(iso) {
+  if (!iso) return '–';
+  return new Date(iso).toLocaleString('en-US', {
+    month:'short', day:'numeric', year:'numeric',
+    hour:'numeric', minute:'2-digit',
+  });
+}
+
+function toInputDt(iso) {
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// Close modals on backdrop click / Escape
+document.querySelectorAll('.modal-backdrop').forEach(bd => {
+  bd.addEventListener('click', e => { if (e.target === bd) bd.classList.remove('open'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape')
+    document.querySelectorAll('.modal-backdrop.open').forEach(bd => bd.classList.remove('open'));
+});
+</script>
+</body>
+</html>

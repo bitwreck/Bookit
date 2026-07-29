@@ -132,6 +132,14 @@ router.put('/admin/password', requireAdmin, ah(async (req, res) => {
 // LDAP helpers
 // ═══════════════════════════════════════════════════════════
 
+/** Write an LDAP event to the ldap_log table (fire-and-forget). */
+function logLdapEvent(event, email, detail, ip = null) {
+  db.execute(
+    'INSERT INTO ldap_log (event, email, detail, ip_address) VALUES (?, ?, ?, ?)',
+    [event, email || null, detail || null, ip]
+  ).catch(err => console.error('[LDAP] Failed to write ldap_log:', err.message));
+}
+
 /** Load all ldap_* keys from the settings table into a single object. */
 async function getLDAPConfig() {
   const [rows] = await db.execute(
@@ -166,7 +174,7 @@ function ldapSearch(client, base, opts) {
  * Authenticate a user against the LDAP directory.
  * Returns { name, email, phone } on success, throws on failure.
  */
-async function ldapAuthenticate(email, password) {
+async function ldapAuthenticate(email, password, ip = null) {
   const cfg = await getLDAPConfig();
   if (cfg.ldap_enabled !== 'true') throw new Error('LDAP is not enabled');
 
@@ -186,7 +194,14 @@ async function ldapAuthenticate(email, password) {
 
   try {
     // Bind with service account to search the directory
-    await ldapBind(client, cfg.ldap_bind_dn, cfg.ldap_bind_pass);
+    try {
+      await ldapBind(client, cfg.ldap_bind_dn, cfg.ldap_bind_pass);
+    } catch (err) {
+      const detail = `Service account bind failed (url=${cfg.ldap_url} dn=${cfg.ldap_bind_dn}): ${err.message}`;
+      console.error(`[LDAP] ${detail}`);
+      logLdapEvent('bind_failed', email, detail, ip);
+      throw err;
+    }
 
     // Build search filter — replace {{username}} with the escaped email
     const escapedEmail = ldap.escapeFilter(email);
@@ -196,22 +211,44 @@ async function ldapAuthenticate(email, password) {
     const attrs = [cfg.ldap_name_attr, cfg.ldap_email_attr];
     if (cfg.ldap_phone_attr) attrs.push(cfg.ldap_phone_attr);
 
-    const entries = await ldapSearch(client, cfg.ldap_base_dn, {
-      filter,
-      scope:      'sub',
-      attributes: attrs,
-    });
+    console.log(`[LDAP] Searching for user: ${email} (filter=${filter} base=${cfg.ldap_base_dn})`);
+    let entries;
+    try {
+      entries = await ldapSearch(client, cfg.ldap_base_dn, {
+        filter,
+        scope:      'sub',
+        attributes: attrs,
+      });
+    } catch (err) {
+      const detail = `Search failed (base=${cfg.ldap_base_dn} filter=${filter}): ${err.message}`;
+      console.error(`[LDAP] ${detail}`);
+      logLdapEvent('search_failed', email, detail, ip);
+      throw err;
+    }
 
-    if (!entries.length)
+    if (!entries.length) {
+      const detail = `No directory entry found (filter=${filter} base=${cfg.ldap_base_dn})`;
+      console.warn(`[LDAP] ${detail}`);
+      logLdapEvent('user_not_found', email, detail, ip);
       throw new Error('No matching user found in directory');
+    }
 
     const entry  = entries[0];
     const obj    = entry.object || {};
     const userDN = entry.objectName;
 
     // Re-bind as the user to verify their password
-    await ldapBind(client, userDN, password);
+    try {
+      await ldapBind(client, userDN, password);
+    } catch (err) {
+      const detail = `Invalid credentials for dn=${userDN}: ${err.message}`;
+      console.warn(`[LDAP] ${detail}`);
+      logLdapEvent('auth_failed', email, detail, ip);
+      throw err;
+    }
 
+    console.log(`[LDAP] Authentication successful for: ${email}`);
+    logLdapEvent('success', email, `Authenticated via ${cfg.ldap_url}`, ip);
     return {
       name:  obj[cfg.ldap_name_attr]  || email,
       email: (obj[cfg.ldap_email_attr] || email).toLowerCase(),
@@ -260,11 +297,12 @@ router.post('/auth/login', ah(async (req, res) => {
 
   // ── LDAP path: password supplied ──────────────────────────
   if (password) {
+    const ip = getClientIP(req);
     let ldapUser;
     try {
-      ldapUser = await ldapAuthenticate(clean, password);
+      ldapUser = await ldapAuthenticate(clean, password, ip);
     } catch (err) {
-      // Surface friendly messages; hide internal LDAP details
+      // logLdapEvent already called inside ldapAuthenticate; just sanitize for client
       const msg = err.message?.includes('Invalid Credentials') || err.message?.includes('bind')
         ? 'Invalid email or password.'
         : (err.message || 'LDAP authentication failed.');
@@ -803,6 +841,17 @@ router.post('/auth/ldap-test', requireAdmin, ah(async (req, res) => {
     try { client.unbind(); } catch {}
     res.status(400).json({ error: err.message || 'LDAP bind failed.' });
   }
+}));
+
+// LDAP log (admin only)
+router.get('/admin/ldap-log', requireAdmin, ah(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const [rows] = await db.execute(
+    `SELECT id, event, email, detail, ip_address, created_at
+     FROM ldap_log ORDER BY created_at DESC LIMIT ?`,
+    [limit]
+  );
+  res.json(rows);
 }));
 
 // ═══════════════════════════════════════════════════════════

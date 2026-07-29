@@ -688,6 +688,28 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
           </div>
         </div>
 
+        <!-- LDAP Log -->
+        <div class="card" id="ldapLogCard" style="display:none">
+          <div class="card-head" style="display:flex;align-items:center;justify-content:space-between">
+            <span class="card-title">LDAP Authentication Log</span>
+            <button class="btn btn-outline" style="font-size:.78rem;padding:.3rem .75rem" onclick="loadLdapLog()">Refresh</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="ldapLogWrap" style="overflow-x:auto">
+              <table class="data-table" id="ldapLogTable">
+                <thead><tr>
+                  <th>Time</th>
+                  <th>Event</th>
+                  <th>Email</th>
+                  <th>Detail</th>
+                  <th>IP</th>
+                </tr></thead>
+                <tbody id="ldapLogBody"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">No events yet</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <!-- Password -->
         <div class="card" style="max-width:560px">
           <div class="card-head"><span class="card-title">Change Password</span></div>
@@ -1305,6 +1327,8 @@ async function loadSettings() {
     const enabled = s.ldap_enabled === true || s.ldap_enabled === 'true';
     document.getElementById('settingLdapEnabled').checked = enabled;
     document.getElementById('ldapFields').style.display   = enabled ? '' : 'none';
+    document.getElementById('ldapLogCard').style.display  = enabled ? '' : 'none';
+    if (enabled) loadLdapLog();
     document.getElementById('ldapUrl').value         = s.ldap_url         || '';
     document.getElementById('ldapBaseDn').value      = s.ldap_base_dn     || '';
     document.getElementById('ldapBindDn').value      = s.ldap_bind_dn     || '';
@@ -1318,10 +1342,46 @@ async function loadSettings() {
   }
 }
 
-// Show/hide LDAP field group when toggle changes
+// Show/hide LDAP field group and log card when toggle changes
 document.getElementById('settingLdapEnabled').addEventListener('change', e => {
-  document.getElementById('ldapFields').style.display = e.target.checked ? '' : 'none';
+  document.getElementById('ldapFields').style.display  = e.target.checked ? '' : 'none';
+  document.getElementById('ldapLogCard').style.display = e.target.checked ? '' : 'none';
+  if (e.target.checked) loadLdapLog();
 });
+
+// Load LDAP log
+async function loadLdapLog() {
+  const tbody = document.getElementById('ldapLogBody');
+  try {
+    const rows = await api('/admin/ldap-log?limit=100');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">No events yet</td></tr>';
+      return;
+    }
+    const eventStyles = {
+      success:       'background:#dcfce7;color:#15803d',
+      bind_failed:   'background:#fee2e2;color:#b91c1c',
+      search_failed: 'background:#fee2e2;color:#b91c1c',
+      user_not_found:'background:#fef9c3;color:#854d0e',
+      auth_failed:   'background:#fee2e2;color:#b91c1c',
+      error:         'background:#fee2e2;color:#b91c1c',
+    };
+    tbody.innerHTML = rows.map(r => {
+      const style = eventStyles[r.event] || '';
+      const badge = `<span style="font-size:.72rem;font-weight:600;padding:.2rem .5rem;border-radius:4px;${style}">${r.event.replace('_',' ').toUpperCase()}</span>`;
+      const time  = new Date(r.created_at).toLocaleString();
+      return `<tr>
+        <td style="white-space:nowrap;font-size:.82rem">${time}</td>
+        <td>${badge}</td>
+        <td style="font-size:.83rem">${r.email || '—'}</td>
+        <td style="font-size:.78rem;color:var(--text-muted);max-width:320px;word-break:break-word">${r.detail || '—'}</td>
+        <td style="font-family:monospace;font-size:.78rem">${r.ip_address || '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);padding:1rem">Failed to load log: ${err.message}</td></tr>`;
+  }
+}
 
 // Save LDAP settings
 document.getElementById('ldapSaveBtn').addEventListener('click', async () => {

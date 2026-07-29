@@ -1,0 +1,139 @@
+============================================================
+ BookIt – Docker Installation Guide
+============================================================
+
+Prerequisites
+-------------
+- A Linux server (Ubuntu 22.04+ recommended)
+- Git installed
+- Docker installed (see step 1)
+
+
+------------------------------------------------------------
+Step 1 – Install Docker
+------------------------------------------------------------
+
+curl -fsSL https://get.docker.com | sh
+
+
+------------------------------------------------------------
+Step 2 – Clone the repository
+------------------------------------------------------------
+
+git clone https://github.com/bitwreck/Bookit.git
+cd Bookit
+
+
+------------------------------------------------------------
+Step 3 – Create your secrets file
+------------------------------------------------------------
+
+Create a file called .env.docker in the project folder:
+
+  nano .env.docker
+
+Add the following, filling in your real values:
+
+  # Required
+  JWT_SECRET=<a long random string — 48+ characters>
+
+  # Email notifications (remove or leave blank to disable)
+  SMTP_HOST=smtp.gmail.com
+  SMTP_PORT=587
+  SMTP_SECURE=false
+  SMTP_USER=you@gmail.com
+  SMTP_PASS=your_app_password
+  SMTP_FROM_EMAIL=you@gmail.com
+  SMTP_FROM_NAME=BookIt
+
+  # SMS notifications via Twilio (remove or leave blank to disable)
+  TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  TWILIO_AUTH_TOKEN=your_twilio_auth_token
+  TWILIO_PHONE_NUMBER=+15551234567
+
+To generate a strong JWT_SECRET, run:
+  node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+
+------------------------------------------------------------
+Step 4 – Start the application
+------------------------------------------------------------
+
+docker compose --env-file .env.docker up -d
+
+On first run Docker will:
+  - Pull the MariaDB 11 image
+  - Build the BookIt app image
+  - Import schema.sql automatically (tables + default admin account)
+  - Start both containers (app waits for DB to be healthy)
+
+
+------------------------------------------------------------
+Step 5 – Verify it is running
+------------------------------------------------------------
+
+docker compose logs -f app
+
+The app will be available at:
+  http://your-server-ip:3000        (public calendar)
+  http://your-server-ip:3000/admin.html  (admin panel)
+
+
+------------------------------------------------------------
+Default admin credentials
+------------------------------------------------------------
+
+  Username: admin
+  Password: Admin1234!
+
+IMPORTANT: Change the password immediately after first login
+via Admin → Settings → Change Password.
+
+
+------------------------------------------------------------
+Useful commands
+------------------------------------------------------------
+
+Stop the app:
+  docker compose down
+
+Restart after a config change:
+  docker compose --env-file .env.docker up -d --build
+
+View live logs:
+  docker compose logs -f app
+
+View database logs:
+  docker compose logs -f db
+
+Open a database shell:
+  docker exec -it bookit-db mariadb -u bookit -pbookitsecret booking
+
+
+------------------------------------------------------------
+Optional – Nginx reverse proxy (port 80 / 443)
+------------------------------------------------------------
+
+If you want the app on a standard port or with SSL, put Nginx
+in front as a reverse proxy. A minimal config:
+
+  server {
+      listen 80;
+      server_name yourdomain.com;
+
+      location / {
+          proxy_pass         http://localhost:3000;
+          proxy_http_version 1.1;
+          proxy_set_header   Upgrade $http_upgrade;
+          proxy_set_header   Connection 'upgrade';
+          proxy_set_header   Host $host;
+          proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_cache_bypass $http_upgrade;
+      }
+  }
+
+For SSL, use Certbot:
+  sudo apt install certbot python3-certbot-nginx
+  sudo certbot --nginx -d yourdomain.com
+
+============================================================

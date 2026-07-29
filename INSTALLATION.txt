@@ -33,12 +33,23 @@ Open it and fill in your values:
 
   nano .env.docker
 
-The only required change is JWT_SECRET. To generate one:
-  node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+Key settings:
 
-Fill in SMTP_* fields to enable email notifications.
-Fill in TWILIO_* fields to enable SMS notifications.
-Leave either section as-is to disable those features.
+  JWT_SECRET       Required. Generate one with:
+                   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+  PORT             Change if port 3000 is already in use on your server.
+                   Uncomment and set to any available port (e.g. PORT=3001).
+
+  DB_ROOT_PASSWORD Change if you want a stronger MariaDB root password.
+                   The app uses a separate internal account, but it's good
+                   practice to set this to something unique.
+
+  SMTP_*           Fill in to enable email notifications. Leave SMTP_HOST
+                   blank to disable.
+
+  TWILIO_*         Fill in to enable SMS notifications. Leave
+                   TWILIO_ACCOUNT_SID blank to disable.
 
 
 ------------------------------------------------------------

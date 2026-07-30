@@ -134,3 +134,438 @@ For SSL, use Certbot:
   sudo certbot --nginx -d yourdomain.com
 
 ============================================================
+
+
+============================================================
+ BookIt – User Manual
+============================================================
+
+------------------------------------------------------------
+1. Application Overview
+------------------------------------------------------------
+
+BookIt is a web-based resource scheduling application.
+It allows users to view a shared calendar and reserve
+resources (labs, equipment, rooms, etc.) for a specific
+date and time. Administrators manage everything through a
+separate admin panel.
+
+Key concepts:
+
+  Resources      Physical or virtual items that can be
+                 booked (e.g., "IMM Lab", "UCSX Blade 1").
+                 Each resource has a name, color, and
+                 belongs to a category.
+
+  Categories     Logical groups for resources (e.g., "Labs",
+                 "Network Gear"). Used to filter the calendar
+                 sidebar.
+
+  Bookings       A reservation of a resource for a specific
+                 start and end time. Bookings are timezone-
+                 aware. Conflicts are detected in real time
+                 before you submit.
+
+  Users          People who can log in and make bookings.
+                 Users are either Local (registered in the
+                 app) or LDAP (authenticated against an
+                 external directory).
+
+  Admin Panel    Accessible at /admin.html. Requires a
+                 separate admin account. Used for all
+                 configuration and management tasks.
+
+
+------------------------------------------------------------
+2. Public Calendar (/index.html)
+------------------------------------------------------------
+
+The main page is available to anyone who can reach the
+server. You do not need to log in to view the calendar.
+
+Sidebar
+  The left sidebar lists all resource categories. Click a
+  category header to show bookings for all resources in
+  that group, or click an individual resource to filter
+  to just that one. Click "All Resources" to reset. Category
+  headers can be collapsed or expanded with the chevron icon.
+  Each resource shows a count of upcoming bookings.
+
+Booking a resource
+  1. Click any open time slot on the calendar, or click
+     the "Book" button.
+  2. Fill in: title, resource, date, start time, end time,
+     timezone, your name, email, and phone (optional).
+  3. The form checks for conflicts in real time. If the
+     selected resource is already booked during that time, a
+     warning banner appears listing the conflicting bookings,
+     and the Submit button is disabled until you choose a
+     different slot or time.
+  4. Click "Confirm Booking". A confirmation is shown and,
+     if configured, an email/SMS notification is sent.
+
+Cancelling a booking
+  If "Require cancellation code" is enabled in Settings, a
+  unique code is emailed to the booker when the booking is
+  created. To cancel, click the booking on the calendar,
+  then enter the code when prompted. Admins can cancel any
+  booking without a code from the admin panel.
+
+Timezone
+  A timezone selector is shown in the sidebar. All times
+  on the calendar display in the selected timezone. When
+  you are logged in, your profile timezone is applied
+  automatically on login.
+
+Logging in
+  Click "Login" in the top bar. Enter your email and
+  password. If LDAP is enabled by the administrator, an
+  additional directory password field appears. See section
+  4 for the full login flow.
+
+User profile
+  Once logged in, click your name in the top bar to open
+  the profile modal. Local users can update name, email,
+  phone, and timezone. LDAP users can update timezone only;
+  all other fields are controlled by the directory.
+
+
+------------------------------------------------------------
+3. Admin Panel (/admin.html)
+------------------------------------------------------------
+
+Log in with the admin username and password (default:
+admin / Admin1234!). Change this immediately after first
+login via Settings -> Change Password.
+
+Dashboard
+  Shows at-a-glance statistics:
+  - Total Bookings, Active Today, Upcoming (7 days),
+    Total Resources, Total Hours Booked (all time)
+  - Top 5 Resources by Hours -- horizontal bar chart
+    showing the five most-used resources (all-time hours)
+  - Least Used (5) -- same format for the five least-used
+  - Weekly Activity -- bar chart of bookings per day for
+    the past 7 days
+  - Recent Bookings table (last 8 non-cancelled)
+
+Appointments
+  Full list of all bookings with search, filter by
+  resource, and filter by status. Admins can edit or
+  delete any appointment.
+
+Resources
+  Add, edit, or delete bookable resources. Each resource
+  requires a name, category, and color. Color can be
+  chosen from 32 presets or entered as a custom hex value.
+
+Categories
+  Add, edit, or delete resource categories. A category
+  cannot be deleted while resources are still assigned
+  to it.
+
+Users
+  View and edit registered users. Admins can update a
+  user's name, email, phone, and timezone. LDAP users are
+  labelled as such; their profile data is sourced from
+  the directory.
+
+Activity Log
+  Chronological log of every booking creation,
+  cancellation, and deletion, with actor and IP address.
+
+LDAP Log
+  Records every LDAP authentication attempt with event
+  type (success, bind_failed, user_not_found, etc.),
+  email, detail message, and IP address. Paginated.
+
+Settings
+  Central configuration page covering email (SMTP), SMS
+  (Twilio), cancellation codes, admin password change,
+  LDAP authentication, and Database Management.
+
+
+------------------------------------------------------------
+4. Authentication -- Local Users vs. LDAP Users
+------------------------------------------------------------
+
+BookIt supports two authentication sources. They coexist:
+some users can log in locally while others authenticate
+through LDAP.
+
+-- Local Users --
+
+Local accounts are created when someone registers at
+/register.html. Passwords are hashed with bcrypt and
+stored in the database. Local users can update all profile
+fields from the profile modal.
+
+Login flow:
+  1. User enters email and password on the login modal.
+  2. App looks up the account in the local users table.
+  3. If found with auth_source = 'local', bcrypt compares
+     the entered password against the stored hash.
+  4. On success, a JWT is issued and stored in the browser.
+     The session expires after 7 days.
+
+-- LDAP Users --
+
+When LDAP is enabled, the login modal gains a directory
+password field. Authentication uses a three-step bind:
+
+  Step 1 -- Service account bind
+    BookIt connects to the LDAP server and binds using the
+    configured service account (Bind DN + Bind Password).
+    This account only needs read access to user entries.
+
+  Step 2 -- User search
+    The app searches under the Base DN using the User
+    Filter, substituting the entered email for {{username}}.
+    Example: filter (mail={{username}}) becomes
+             (mail=jdoe@corp.example.com)
+    The search returns the matched user's full DN.
+
+  Step 3 -- User bind (password verification)
+    BookIt binds a second time using the matched user DN
+    and the password the user typed. A successful bind
+    confirms the password. The password is never stored.
+
+  On first successful LDAP login, the user's name, email,
+  and phone are read from directory attributes and a local
+  record is created with auth_source = 'ldap'. On later
+  logins the record is refreshed from the directory,
+  keeping local data in sync with any directory changes.
+
+  LDAP users can only change their timezone in BookIt.
+  All other profile data is sourced from the directory.
+
+LDAP event log
+  Every login attempt is written to Admin -> LDAP Log
+  with timestamp, result, email, detail, and IP address.
+
+
+------------------------------------------------------------
+4a. Configuring LDAP (unencrypted, port 389)
+------------------------------------------------------------
+
+Go to Admin -> Settings -> LDAP Authentication.
+
+  Enable LDAP            Toggle ON.
+
+  LDAP URL               ldap://192.168.1.50:389
+                         ldap://ldap.corp.example.com:389
+
+  Base DN                Root of the directory subtree
+                         that contains user accounts.
+                         Example:
+                           dc=corp,dc=example,dc=com
+
+  Bind DN                Full DN of the service account.
+                         Example:
+                           cn=svc-bookit,ou=ServiceAccounts,
+                           dc=corp,dc=example,dc=com
+
+  Bind Password          Password for the service account.
+
+  User Filter            LDAP search filter. {{username}}
+                         is replaced with the email the
+                         user types at login.
+
+                         Most common (OpenLDAP / AD mail):
+                           (mail={{username}})
+
+                         Active Directory UPN:
+                           (userPrincipalName={{username}})
+
+                         AD sAMAccountName (short login):
+                           (sAMAccountName={{username}})
+
+  Name Attribute         Directory attribute for full name.
+                         Default: cn
+                         Active Directory: displayName
+
+  Email Attribute        Directory attribute for email.
+                         Default: mail
+
+  Phone Attribute        Directory attribute for phone.
+                         Default: telephoneNumber
+                         Leave blank to skip phone lookup.
+
+Active Directory example (port 389):
+
+  LDAP URL:      ldap://ad.corp.example.com:389
+  Base DN:       dc=corp,dc=example,dc=com
+  Bind DN:       cn=svc-bookit,cn=Users,dc=corp,dc=example,dc=com
+  Bind Password: (service account password)
+  User Filter:   (userPrincipalName={{username}})
+  Name Attr:     displayName
+  Email Attr:    mail
+  Phone Attr:    telephoneNumber
+
+OpenLDAP example (port 389):
+
+  LDAP URL:      ldap://ldap.corp.example.com:389
+  Base DN:       ou=People,dc=corp,dc=example,dc=com
+  Bind DN:       cn=svc-bookit,ou=ServiceAccounts,dc=corp,dc=example,dc=com
+  Bind Password: (service account password)
+  User Filter:   (mail={{username}})
+  Name Attr:     cn
+  Email Attr:    mail
+  Phone Attr:    telephoneNumber
+
+Click "Test Connection" to verify the service account bind
+succeeds before saving. Test results appear in the admin
+UI and are also recorded in the LDAP Log.
+
+
+------------------------------------------------------------
+4b. Configuring LDAPS (encrypted, port 636)
+------------------------------------------------------------
+
+LDAPS wraps the LDAP connection in TLS. Only the URL
+changes -- all other fields are identical to the plain
+LDAP configuration above.
+
+  LDAP URL:  ldaps://ldap.corp.example.com:636
+  LDAP URL:  ldaps://ad.corp.example.com:636
+
+BookIt automatically accepts self-signed certificates, so
+no extra CA configuration is needed on the BookIt side.
+This is intentional for lab and internal environments
+where certificates are issued by a private CA.
+
+TLS version: BookIt negotiates from TLSv1 upward. Modern
+servers will select TLS 1.2 or 1.3 automatically.
+
+Active Directory LDAPS example:
+
+  LDAP URL:      ldaps://ad.corp.example.com:636
+  Base DN:       dc=corp,dc=example,dc=com
+  Bind DN:       cn=svc-bookit,cn=Users,dc=corp,dc=example,dc=com
+  Bind Password: (service account password)
+  User Filter:   (userPrincipalName={{username}})
+  Name Attr:     displayName
+  Email Attr:    mail
+  Phone Attr:    telephoneNumber
+
+OpenLDAP LDAPS example:
+
+  LDAP URL:      ldaps://ldap.corp.example.com:636
+  Base DN:       ou=People,dc=corp,dc=example,dc=com
+  Bind DN:       cn=svc-bookit,ou=ServiceAccounts,dc=corp,dc=example,dc=com
+  Bind Password: (service account password)
+  User Filter:   (mail={{username}})
+  Name Attr:     cn
+  Email Attr:    mail
+  Phone Attr:    telephoneNumber
+
+Troubleshooting LDAPS:
+  - Confirm port 636 is reachable from the Docker host
+    (check firewall rules and security groups).
+  - Use "Test Connection" in Settings. The error message
+    and any TLS handshake details are shown in the LDAP
+    Log.
+  - If you see "DEPTH_ZERO_SELF_SIGNED_CERT" the cert is
+    self-signed -- BookIt accepts this automatically.
+  - Mutual TLS (client certificates) is not supported.
+
+
+------------------------------------------------------------
+5. Database Management (Scheduled Purge)
+------------------------------------------------------------
+
+Over time the appointments table grows as old bookings
+accumulate. Database Management automatically removes
+records older than a configurable threshold so the
+database stays lean without manual cleanup.
+
+Where to configure:
+  Admin -> Settings -> Database Management
+
+Settings:
+
+  Schedule deletion of old data
+    Master on/off toggle. When OFF, no automatic deletions
+    occur regardless of other settings.
+
+  Retention period
+    How far back to keep records. Appointments whose end
+    time is older than this cutoff are deleted. Upcoming
+    and active bookings are never affected.
+
+    Examples:
+      6 months  -- keep the last 6 months of bookings
+      12 months -- keep the last year (recommended)
+      90 days   -- keep the last 90 days
+
+  Run schedule
+    How often the purge check fires.
+
+    Examples:
+      1 month  -- purge runs once per month
+      1 week   -- purge runs once per week
+      1 day    -- purge runs daily
+
+  Last run
+    Read-only timestamp of the most recent automatic purge.
+
+  Run Now
+    Triggers an immediate purge using current retention
+    settings. Use this for a one-off cleanup or to test
+    the configuration before enabling the schedule.
+
+How it works:
+  The app checks every 15 minutes whether a purge is due.
+  If the time since the last run exceeds the configured
+  schedule interval, a purge executes automatically.
+  The purge runs a single DELETE:
+
+    DELETE FROM appointments WHERE end_time < [cutoff]
+
+  where cutoff = current time minus the retention period.
+
+  After a successful purge the last-run timestamp is
+  updated. The next check will not trigger again until
+  the full interval elapses.
+
+  Note: associated activity log entries and cancellation
+  codes are not removed by the purge; only appointment
+  records are deleted.
+
+Recommended settings:
+  Retention:  12 months
+  Schedule:   1 month
+
+
+------------------------------------------------------------
+6. HTTPS / Self-Signed Certificate
+------------------------------------------------------------
+
+BookIt can serve HTTPS directly without a reverse proxy.
+
+Generate a self-signed certificate (Linux / Git Bash):
+
+  mkdir -p certs
+  openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
+    -keyout certs/key.pem \
+    -out    certs/cert.pem \
+    -subj "/CN=bookit-local"
+
+When BookIt starts and finds both cert.pem and key.pem
+in the certs/ directory it automatically:
+  - Serves HTTPS on port 3443 (configurable via HTTPS_PORT)
+  - Redirects all HTTP traffic on port 3000 to HTTPS
+
+The certs/ directory is excluded from git (.gitignore) so
+private keys are never committed to the repository.
+
+To use a CA-signed certificate, replace the two .pem files.
+If your CA provides an intermediate chain, concatenate
+it into cert.pem (server cert first, then intermediates).
+
+For Docker deployments the certs/ folder is mounted into
+the container as a read-only volume. The HTTPS_PORT,
+SSL_CERT, and SSL_KEY variables in .env.docker control
+the paths and port.
+
+============================================================

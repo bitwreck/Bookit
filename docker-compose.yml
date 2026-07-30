@@ -33,6 +33,11 @@ services:
         condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
+      - "${HTTPS_PORT:-3443}:3443"
+    volumes:
+      # Optional: mount a certs folder for HTTPS.
+      # Place cert.pem + key.pem in ./certs/ and uncomment SSL_CERT/SSL_KEY below.
+      - ./certs:/app/certs:ro
     environment:
       # Database — internal container networking; credentials match the db service above
       DB_HOST:        db
@@ -58,6 +63,11 @@ services:
       TWILIO_ACCOUNT_SID:  ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN:   ${TWILIO_AUTH_TOKEN:-}
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+
+      # HTTPS — uncomment and populate SSL_CERT/SSL_KEY to enable
+      HTTPS_PORT: ${HTTPS_PORT:-3443}
+      SSL_CERT:   ${SSL_CERT:-}
+      SSL_KEY:    ${SSL_KEY:-}
 
       NODE_ENV: production
       PORT:     3000

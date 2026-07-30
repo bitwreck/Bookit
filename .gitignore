@@ -10,6 +10,9 @@ certs/
 # Dependencies
 node_modules/
 
+# Downloaded vendor assets (regenerate with: node scripts/download-vendor.js)
+public/vendor/
+
 # Logs
 npm-debug.log*
 *.log

@@ -1,8 +1,8 @@
-# ── Build stage (install prod deps only) ───────────────────
+# ── Build stage (all deps — devDeps needed to copy vendor files) ──
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # ── Runtime stage ───────────────────────────────────────────
 FROM node:20-alpine
@@ -13,6 +13,12 @@ RUN addgroup -S booking && adduser -S booking -G booking
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Copy vendor assets from node_modules into public/vendor/
+RUN node scripts/download-vendor.js
+
+# Prune devDependencies — vendor files are already copied, no longer needed
+RUN npm prune --omit=dev
 
 # Remove dev/docker files we don't need at runtime
 RUN rm -f Dockerfile docker-compose.yml .dockerignore

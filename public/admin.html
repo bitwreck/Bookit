@@ -1450,7 +1450,7 @@ document.getElementById('settingLdapEnabled').addEventListener('change', e => {
 async function loadLdapLog() {
   const tbody = document.getElementById('ldapLogBody');
   try {
-    const rows = await api('/admin/ldap-log?limit=100');
+    const rows = await api('/admin/ldap-log?limit=10');
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">No events yet</td></tr>';
       return;

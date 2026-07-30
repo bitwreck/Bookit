@@ -17,6 +17,7 @@
   --danger:     #ef4444;
   --success:    #16a34a;
   --warning:    #d97706;
+  --primary:    #0ea5e9;
   --radius:     10px;
   --shadow:     0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
   --shadow-lg:  0 10px 40px rgba(0,0,0,.12);
@@ -28,6 +29,7 @@
   --border:     #334155;
   --text:       #f1f5f9;
   --text-muted: #94a3b8;
+  --primary:    #38bdf8;
 }
 
 /* ── Reset ─────────────────────────────────────────────── */
@@ -118,6 +120,17 @@ a{color:inherit;text-decoration:none}
 }
 .stat-val{font-size:2rem;font-weight:800;line-height:1}
 .stat-label{font-size:.78rem;color:var(--text-muted);margin-top:.35rem;font-weight:600}
+
+/* ── Dashboard utilization section ────────────────────── */
+.util-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+@media(max-width:700px){.util-grid{grid-template-columns:1fr}}
+.util-bar-row{margin-bottom:.7rem}
+.util-bar-row:last-child{margin-bottom:0}
+.util-bar-label{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:.2rem}
+.util-bar-label span:first-child{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%}
+.util-bar-label span:last-child{color:var(--text-muted);flex-shrink:0;padding-left:.5rem}
+.util-bar-track{background:var(--border);border-radius:4px;height:8px;overflow:hidden}
+.util-bar-fill{height:100%;border-radius:4px;transition:width .5s cubic-bezier(.4,0,.2,1)}
 
 /* ── Table ─────────────────────────────────────────────── */
 .table-wrap{overflow-x:auto}
@@ -422,6 +435,41 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
             <div class="stat-val" id="statResources">–</div>
             <div class="stat-label">Resources</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statHours">–</div>
+            <div class="stat-label">Total Hours Booked</div>
+          </div>
+        </div>
+
+        <!-- Utilization -->
+        <div class="util-grid">
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Top 5 by Hours</span>
+              <span style="font-size:.72rem;color:var(--text-muted)">All time · non-cancelled</span>
+            </div>
+            <div class="card-body" id="top5Chart" style="padding-top:.75rem">
+              <p style="color:var(--text-muted);text-align:center">Loading…</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Least Used (5)</span>
+              <span style="font-size:.72rem;color:var(--text-muted)">All time · non-cancelled</span>
+            </div>
+            <div class="card-body" id="bottom5Chart" style="padding-top:.75rem">
+              <p style="color:var(--text-muted);text-align:center">Loading…</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly timeline -->
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-head">
+            <span class="card-title">Weekly Activity</span>
+            <span style="font-size:.72rem;color:var(--text-muted)">Bookings per day · past 7 days</span>
+          </div>
+          <div class="card-body" id="weeklyChart" style="padding:.75rem 1.25rem 1rem"></div>
         </div>
 
         <!-- Recent appointments -->
@@ -1203,21 +1251,63 @@ function renderDashboard() {
   const todayE = new Date(todayS.getTime() + 86400000);
   const week   = new Date(todayE.getTime() + 6 * 86400000);
 
-  const total    = appointments.filter(a => a.status !== 'cancelled').length;
-  const today    = appointments.filter(a => {
+  const active = appointments.filter(a => a.status !== 'cancelled');
+
+  const total    = active.length;
+  const today    = active.filter(a => {
     const s = new Date(a.start_time), e = new Date(a.end_time);
-    return a.status !== 'cancelled' && s < todayE && e > todayS;
+    return s < todayE && e > todayS;
   }).length;
-  const upcoming = appointments.filter(a => {
+  const upcoming = active.filter(a => {
     const s = new Date(a.start_time);
-    return a.status !== 'cancelled' && s >= todayS && s <= week;
+    return s >= todayS && s <= week;
   }).length;
+
+  // ── Total hours ──────────────────────────────────────────
+  const totalHours = active.reduce((sum, a) => {
+    return sum + (new Date(a.end_time) - new Date(a.start_time)) / 3600000;
+  }, 0);
 
   document.getElementById('statTotal').textContent     = total;
   document.getElementById('statToday').textContent     = today;
   document.getElementById('statUpcoming').textContent  = upcoming;
   document.getElementById('statResources').textContent = resources.length;
+  document.getElementById('statHours').textContent     = totalHours.toFixed(1) + 'h';
 
+  // ── Per-resource utilization ─────────────────────────────
+  const hoursMap = {};
+  resources.forEach(r => {
+    hoursMap[r.id] = { name: r.name, color: r.color, hours: 0 };
+  });
+  active.forEach(a => {
+    if (hoursMap[a.resource_id]) {
+      hoursMap[a.resource_id].hours += (new Date(a.end_time) - new Date(a.start_time)) / 3600000;
+    }
+  });
+  const allUtil = Object.values(hoursMap).sort((a, b) => b.hours - a.hours);
+  const maxHours = allUtil.length ? allUtil[0].hours : 0;
+
+  const top5    = allUtil.slice(0, 5);
+  const bottom5 = [...allUtil].sort((a, b) => a.hours - b.hours).slice(0, 5);
+
+  renderUtilBars('top5Chart',    top5,    maxHours);
+  renderUtilBars('bottom5Chart', bottom5, maxHours);
+
+  // ── Weekly chart ─────────────────────────────────────────
+  const weekDays = [];
+  for (let i = 6; i >= 0; i--) {
+    const dS = new Date(todayS.getTime() - i * 86400000);
+    const dE = new Date(dS.getTime() + 86400000);
+    const count = active.filter(a => {
+      const s = new Date(a.start_time);
+      return s >= dS && s < dE;
+    }).length;
+    const label = dS.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    weekDays.push({ label, count });
+  }
+  renderWeeklyChart(weekDays);
+
+  // ── Recent bookings ──────────────────────────────────────
   const recent = [...appointments]
     .filter(a => a.status !== 'cancelled')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -1232,6 +1322,67 @@ function renderDashboard() {
       <td><span class="badge badge-${a.status}">${a.status}</span></td>
     </tr>
   `).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">No bookings yet</td></tr>`;
+}
+
+function renderUtilBars(containerId, data, maxHours) {
+  const el = document.getElementById(containerId);
+  if (!data.length) {
+    el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:1rem">No resources</p>';
+    return;
+  }
+  el.innerHTML = data.map(r => {
+    const pct    = maxHours > 0 ? (r.hours / maxHours * 100).toFixed(1) : '0.0';
+    const barPct = maxHours > 0 ? (r.hours / maxHours * 100)            : 0;
+    return `
+      <div class="util-bar-row">
+        <div class="util-bar-label">
+          <span title="${r.name}">${r.name}</span>
+          <span>${r.hours.toFixed(1)}h &middot; ${pct}%</span>
+        </div>
+        <div class="util-bar-track">
+          <div class="util-bar-fill" style="width:${barPct}%;background:${r.color}"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderWeeklyChart(days) {
+  const el = document.getElementById('weeklyChart');
+  const maxCount = Math.max(...days.map(d => d.count), 1);
+
+  // Dimensions
+  const W = 600, H = 150;
+  const padL = 28, padR = 8, padT = 16, padB = 38;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const colW   = chartW / days.length;
+  const barW   = colW * 0.55;
+
+  // Y gridlines & labels (0, mid, max)
+  const yTicks = [0, Math.round(maxCount / 2), maxCount].filter((v, i, a) => a.indexOf(v) === i);
+  const gridLines = yTicks.map(v => {
+    const y = padT + chartH - (v / maxCount) * chartH;
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
+            <text x="${padL - 4}" y="${y + 4}" text-anchor="end" font-size="9" fill="var(--text-muted)">${v}</text>`;
+  }).join('');
+
+  // Bars + day labels
+  const bars = days.map((d, i) => {
+    const x    = padL + i * colW + (colW - barW) / 2;
+    const bH   = d.count > 0 ? Math.max((d.count / maxCount) * chartH, 4) : 2;
+    const y    = padT + chartH - bH;
+    const lx   = padL + i * colW + colW / 2;
+    // Short label: "Mon 7/28" → just weekday + date
+    const parts = d.label.split(', ');          // e.g. ["Mon", "Jul 28"]
+    const short = parts.length > 1 ? parts[0] + ' ' + parts[1].replace(/\w+ /, '') : parts[0];
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${bH}" rx="3" fill="var(--primary)" opacity=".82"/>
+            ${d.count > 0 ? `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="var(--text)">${d.count}</text>` : ''}
+            <text x="${lx}" y="${H - 6}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">${short}</text>`;
+  }).join('');
+
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible">
+    ${gridLines}${bars}
+  </svg>`;
 }
 
 // ════════════════════════════════════════════════════════

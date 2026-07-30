@@ -1747,7 +1747,7 @@ function gotoUsersPage(p) {
 }
 
 async function deleteUser(id, email, name) {
-  if (!confirm(`Delete user "${name}" (${email})?\n\nThis cannot be undone. Their past bookings will remain in the system.`)) return;
+  if (!confirm(`Delete user "${name}" (${email})?\n\nThis cannot be undone. All their bookings (past and future) will remain on the calendar but will no longer be linked to an account.`)) return;
   try {
     await api(`/users/${id}`, { method: 'DELETE' });
     toast(`User ${email} deleted`, 'success');

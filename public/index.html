@@ -757,6 +757,19 @@ select.form-control {
           <span class="form-error" id="errEnd">Please select an end date and time.</span>
         </div>
 
+        <!-- Real-time conflict warning -->
+        <div id="conflictWarning" style="display:none;margin-bottom:1rem;padding:.75rem 1rem;
+             background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:.83rem;color:#b91c1c">
+          <div style="display:flex;align-items:center;gap:.5rem;font-weight:700;margin-bottom:.35rem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            This time slot conflicts with an existing booking
+          </div>
+          <div id="conflictDetails"></div>
+        </div>
+
         <div class="form-group">
           <label for="bTimezone">Timezone</label>
           <select class="form-control" id="bTimezone"></select>
@@ -1167,6 +1180,72 @@ buildTimeOptions(document.getElementById('bEndTime'),   '10:00');
 
 document.getElementById('bStartDate').addEventListener('change', onStartChange);
 document.getElementById('bStartTime').addEventListener('change', onStartChange);
+
+// ── Real-time conflict check ──────────────────────────────
+let conflictCheckTimer = null;
+
+function scheduleConflictCheck() {
+  clearTimeout(conflictCheckTimer);
+  conflictCheckTimer = setTimeout(checkConflict, 400);
+}
+
+async function checkConflict() {
+  const resourceId = document.getElementById('bResource').value;
+  const startDate  = document.getElementById('bStartDate').value;
+  const startTime  = document.getElementById('bStartTime').value;
+  const endDate    = document.getElementById('bEndDate').value;
+  const endTime    = document.getElementById('bEndTime').value;
+  const tz         = document.getElementById('bTimezone').value || currentTz;
+  const warning    = document.getElementById('conflictWarning');
+  const details    = document.getElementById('conflictDetails');
+  const submitBtn  = document.getElementById('submitBookBtn');
+
+  // Need all fields to run a check
+  if (!resourceId || !startDate || !startTime || !endDate || !endTime) {
+    warning.style.display = 'none';
+    submitBtn.disabled = false;
+    return;
+  }
+
+  // Convert wall-clock times in selected tz to UTC for the API
+  const startUtc = zonedToUTC(startDate, startTime, tz);
+  const endUtc   = zonedToUTC(endDate,   endTime,   tz);
+  if (!startUtc || !endUtc || startUtc >= endUtc) {
+    warning.style.display = 'none';
+    return;
+  }
+
+  try {
+    const result = await apiFetch(
+      `/appointments/check-conflict?resource_id=${resourceId}&start=${encodeURIComponent(startUtc)}&end=${encodeURIComponent(endUtc)}`
+    );
+
+    if (result.conflict) {
+      const fmt = iso => new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+      details.innerHTML = result.bookings.map(b =>
+        `<div style="margin-top:.25rem">
+          <strong>${b.title}</strong> by ${b.booked_by}<br>
+          <span style="opacity:.8">${fmt(b.start_time)} – ${fmt(b.end_time)}</span>
+        </div>`
+      ).join('');
+      warning.style.display = 'block';
+      submitBtn.disabled = true;
+      submitBtn.title = 'Resolve the conflict before booking';
+    } else {
+      warning.style.display = 'none';
+      submitBtn.disabled = false;
+      submitBtn.title = '';
+    }
+  } catch {
+    // Silently ignore network errors during live check
+    warning.style.display = 'none';
+    submitBtn.disabled = false;
+  }
+}
+
+['bResource','bStartDate','bStartTime','bEndDate','bEndTime','bTimezone'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', scheduleConflictCheck);
+});
 
 document.getElementById('tzSelect').addEventListener('change', e => {
   currentTz = e.target.value;
@@ -1603,6 +1682,10 @@ function resetBookingForm() {
   bookFormView.style.display = '';
   bookSuccessView.classList.remove('show');
   document.querySelectorAll('.form-error').forEach(el => el.classList.remove('show'));
+  // Reset conflict state
+  document.getElementById('conflictWarning').style.display = 'none';
+  document.getElementById('submitBookBtn').disabled = false;
+  document.getElementById('submitBookBtn').title    = '';
 }
 
 // Close on backdrop click

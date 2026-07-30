@@ -733,6 +733,37 @@ router.get('/appointments/:id', ah(async (req, res) => {
   });
 }));
 
+// Real-time conflict check — called while the user is filling out the booking form.
+// GET /api/appointments/check-conflict?resource_id=1&start=...&end=...&exclude_id=5
+router.get('/appointments/check-conflict', ah(async (req, res) => {
+  const { resource_id, start, end, exclude_id } = req.query;
+  if (!resource_id || !start || !end)
+    return res.status(400).json({ error: 'resource_id, start, and end are required' });
+
+  let sql = `
+    SELECT a.id, a.title, a.start_time, a.end_time,
+           a.booked_by_name
+    FROM appointments a
+    WHERE a.resource_id = ? AND a.status != 'cancelled'
+      AND a.start_time < ? AND a.end_time > ?
+  `;
+  const params = [resource_id, end, start];
+
+  if (exclude_id) { sql += ' AND a.id != ?'; params.push(exclude_id); }
+
+  const [rows] = await db.execute(sql, params);
+  res.json({
+    conflict: rows.length > 0,
+    bookings: rows.map(r => ({
+      id:         r.id,
+      title:      r.title,
+      booked_by:  r.booked_by_name,
+      start_time: toISOLocal(r.start_time),
+      end_time:   toISOLocal(r.end_time),
+    })),
+  });
+}));
+
 router.post('/appointments', ah(async (req, res) => {
   const { resource_id, title, description, booked_by_name,
           booked_by_email, booked_by_phone, start_time, end_time, timezone } = req.body || {};

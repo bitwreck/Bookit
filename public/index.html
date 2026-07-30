@@ -940,6 +940,9 @@ select.form-control {
     </div>
 
     <form id="profileForm" novalidate>
+      <div id="profLdapNote" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.6rem .85rem;font-size:.8rem;color:var(--text-muted);margin-bottom:1rem">
+        Your name, email, and phone are managed by your organisation's directory and cannot be changed here.
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label for="profFirstName">First Name *</label>
@@ -2052,8 +2055,21 @@ function openProfileModal() {
   const tzSel = document.getElementById('profTimezone');
   populateTzSelect(tzSel, userSession.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
   document.getElementById('profileError').style.display = 'none';
+
+  // LDAP users can only change timezone — lock other fields
+  const isLdap = userSession.authSource === 'ldap';
+  const ldapNote = document.getElementById('profLdapNote');
+  const lockFields = ['profFirstName', 'profLastName', 'profEmail', 'profPhone'];
+  lockFields.forEach(id => {
+    const el = document.getElementById(id);
+    el.disabled = isLdap;
+    el.style.opacity = isLdap ? '.55' : '';
+    el.style.cursor  = isLdap ? 'not-allowed' : '';
+  });
+  if (ldapNote) ldapNote.style.display = isLdap ? 'block' : 'none';
+
   profileModal.classList.add('open');
-  document.getElementById('profFirstName').focus();
+  (isLdap ? tzSel : document.getElementById('profFirstName')).focus();
 }
 
 function closeProfileModal() { profileModal.classList.remove('open'); }
@@ -2074,12 +2090,16 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   const btn        = document.getElementById('saveProfileBtn');
 
   errEl.style.display = 'none';
-  if (!first_name) { errEl.textContent = 'First name is required.'; errEl.style.display = 'block'; return; }
-  if (!last_name)  { errEl.textContent = 'Last name is required.';  errEl.style.display = 'block'; return; }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errEl.textContent = 'A valid email address is required.';
-    errEl.style.display = 'block';
-    return;
+  const isLdap = userSession?.authSource === 'ldap';
+
+  if (!isLdap) {
+    if (!first_name) { errEl.textContent = 'First name is required.'; errEl.style.display = 'block'; return; }
+    if (!last_name)  { errEl.textContent = 'Last name is required.';  errEl.style.display = 'block'; return; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errEl.textContent = 'A valid email address is required.';
+      errEl.style.display = 'block';
+      return;
+    }
   }
 
   btn.disabled    = true;
@@ -2087,10 +2107,13 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
 
   try {
     const token = localStorage.getItem('bt-user-token');
+    const body  = isLdap
+      ? { timezone }
+      : { first_name, last_name, email, phone: phone || undefined, timezone };
     const data  = await apiFetch('/auth/profile', {
       method:  'PUT',
       headers: { Authorization: 'Bearer ' + token },
-      body:    JSON.stringify({ first_name, last_name, email, phone: phone || undefined, timezone }),
+      body:    JSON.stringify(body),
     });
 
     // Update stored session

@@ -388,40 +388,53 @@ router.put('/auth/profile', ah(async (req, res) => {
     return res.status(401).json({ error: 'Invalid or expired session' });
   }
 
-  const { first_name, last_name, email, phone, timezone } = req.body || {};
-  if (!first_name?.trim() || !last_name?.trim() || !email?.trim())
-    return res.status(400).json({ error: 'First name, last name, and email are required' });
+  // Look up auth_source so we can restrict LDAP users
+  const [[dbUser]] = await db.execute(
+    'SELECT id, name, email, phone, timezone, auth_source FROM users WHERE id = ?', [payload.userId]
+  );
+  if (!dbUser) return res.status(404).json({ error: 'User not found' });
 
-  const name  = `${first_name.trim()} ${last_name.trim()}`;
-  const clean = email.trim().toLowerCase();
-  const tz    = timezone?.trim() || payload.timezone || 'UTC';
+  const isLdap = dbUser.auth_source === 'ldap';
+  const tz = (req.body?.timezone || '').trim() || payload.timezone || 'UTC';
 
-  // Check if new email is already taken by another account
-  if (clean !== payload.email) {
-    const [[existing]] = await db.execute(
-      'SELECT id FROM users WHERE email = ? AND id != ?', [clean, payload.userId]
+  if (isLdap) {
+    // LDAP users may only update timezone
+    await db.execute('UPDATE users SET timezone = ? WHERE id = ?', [tz, payload.userId]);
+  } else {
+    const { first_name, last_name, email, phone } = req.body || {};
+    if (!first_name?.trim() || !last_name?.trim() || !email?.trim())
+      return res.status(400).json({ error: 'First name, last name, and email are required' });
+
+    const name  = `${first_name.trim()} ${last_name.trim()}`;
+    const clean = email.trim().toLowerCase();
+
+    if (clean !== payload.email) {
+      const [[existing]] = await db.execute(
+        'SELECT id FROM users WHERE email = ? AND id != ?', [clean, payload.userId]
+      );
+      if (existing)
+        return res.status(409).json({ error: 'That email is already used by another account.' });
+    }
+
+    await db.execute(
+      'UPDATE users SET name = ?, email = ?, phone = ?, timezone = ? WHERE id = ?',
+      [name, clean, phone?.trim() || null, tz, payload.userId]
     );
-    if (existing)
-      return res.status(409).json({ error: 'That email is already used by another account.' });
   }
 
-  await db.execute(
-    'UPDATE users SET name = ?, email = ?, phone = ?, timezone = ? WHERE id = ?',
-    [name, clean, phone?.trim() || null, tz, payload.userId]
-  );
-
   const [[user]] = await db.execute(
-    'SELECT id, name, email, phone, timezone FROM users WHERE id = ?', [payload.userId]
+    'SELECT id, name, email, phone, timezone, auth_source FROM users WHERE id = ?', [payload.userId]
   );
 
   // Re-issue token with updated claims
   const token = jwt.sign(
-    { type: 'user', userId: user.id, name: user.name, email: user.email, phone: user.phone, timezone: user.timezone },
+    { type: 'user', userId: user.id, name: user.name, email: user.email,
+      phone: user.phone, timezone: user.timezone, authSource: user.auth_source },
     process.env.JWT_SECRET,
     { expiresIn: '30d' }
   );
 
-  res.json({ token, user });
+  res.json({ token, user: { ...user, authSource: user.auth_source } });
 }));
 
 router.get('/auth/me', ah(async (req, res) => {
@@ -431,10 +444,10 @@ router.get('/auth/me', ah(async (req, res) => {
     const payload = jwt.verify(auth, process.env.JWT_SECRET);
     if (payload.type !== 'user') return res.status(401).json({ error: 'Invalid token' });
     const [[user]] = await db.execute(
-      'SELECT id, name, email, phone, timezone FROM users WHERE id = ?', [payload.userId]
+      'SELECT id, name, email, phone, timezone, auth_source FROM users WHERE id = ?', [payload.userId]
     );
     if (!user) return res.status(401).json({ error: 'User not found' });
-    res.json(user);
+    res.json({ ...user, authSource: user.auth_source });
   } catch {
     res.status(401).json({ error: 'Session expired. Please sign in again.' });
   }
@@ -1014,13 +1027,17 @@ router.post('/admin/purge', requireAdmin, ah(async (_req, res) => {
 
 // LDAP log (admin only)
 router.get('/admin/ldap-log', requireAdmin, ah(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const limit  = Math.min(parseInt(req.query.limit) || 10, 50);
+  const page   = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = (page - 1) * limit;
+
+  const [[{ total }]] = await db.execute('SELECT COUNT(*) AS total FROM ldap_log');
   const [rows] = await db.execute(
     `SELECT id, event, email, detail, ip_address, created_at
-     FROM ldap_log ORDER BY created_at DESC LIMIT ?`,
-    [limit]
+     FROM ldap_log ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [limit, offset]
   );
-  res.json(rows);
+  res.json({ total, page, limit, pages: Math.min(Math.ceil(total / limit), 5), data: rows });
 }));
 
 // ═══════════════════════════════════════════════════════════

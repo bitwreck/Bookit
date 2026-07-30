@@ -1657,7 +1657,13 @@ async function loadUsers() {
           </span>
         </td>
         <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${fmtDt(u.created_at)}</td>
-        <td>
+        <td style="display:flex;gap:.4rem;align-items:center">
+          ${u.auth_source !== 'ldap' ? `
+          <button onclick="openEditUser(${u.id}, '${u.name.replace(/'/g,"\\'")}', '${u.email.replace(/'/g,"\\'")}', '${(u.phone||'').replace(/'/g,"\\'")}', '${u.timezone||'UTC'}')"
+            style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:.8rem;padding:.2rem .5rem;
+                   border-radius:4px;border:1px solid var(--primary);opacity:.75;transition:opacity .15s"
+            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity='.75'">Edit</button>
+          ` : ''}
           <button onclick="deleteUser(${u.id}, '${u.email.replace(/'/g,"\\'")}', '${u.name.replace(/'/g,"\\'")}'"
             style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:.8rem;padding:.2rem .5rem;
                    border-radius:4px;border:1px solid var(--danger);opacity:.75;transition:opacity .15s"
@@ -1744,6 +1750,110 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape')
     document.querySelectorAll('.modal-backdrop.open').forEach(bd => bd.classList.remove('open'));
 });
+
+// ── Edit User ─────────────────────────────────────────────
+const TZ_LIST = [
+  'UTC',
+  'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+  'America/Anchorage','America/Halifax','America/Toronto','America/Vancouver',
+  'America/Sao_Paulo','America/Argentina/Buenos_Aires','America/Bogota',
+  'Europe/London','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome',
+  'Europe/Amsterdam','Europe/Stockholm','Europe/Warsaw','Europe/Zurich',
+  'Europe/Athens','Europe/Helsinki','Europe/Moscow','Europe/Istanbul',
+  'Asia/Dubai','Asia/Kolkata','Asia/Colombo','Asia/Kathmandu',
+  'Asia/Dhaka','Asia/Bangkok','Asia/Singapore','Asia/Shanghai',
+  'Asia/Tokyo','Asia/Seoul','Asia/Jakarta','Asia/Manila',
+  'Australia/Sydney','Australia/Melbourne','Australia/Brisbane','Australia/Perth',
+  'Pacific/Auckland','Pacific/Honolulu','Africa/Cairo','Africa/Nairobi',
+  'Africa/Johannesburg','Africa/Lagos',
+];
+
+(function populateEditUserTz() {
+  const sel = document.getElementById('editUserTimezone');
+  TZ_LIST.forEach(tz => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = tz;
+    sel.appendChild(opt);
+  });
+})();
+
+function openEditUser(id, name, email, phone, timezone) {
+  document.getElementById('editUserId').value       = id;
+  document.getElementById('editUserName').value     = name;
+  document.getElementById('editUserEmail').value    = email;
+  document.getElementById('editUserPhone').value    = phone || '';
+  document.getElementById('editUserTimezone').value = timezone || 'UTC';
+  document.getElementById('editUserError').textContent = '';
+  document.getElementById('editUserModal').classList.add('open');
+}
+
+document.getElementById('closeEditUserModal').addEventListener('click', () =>
+  document.getElementById('editUserModal').classList.remove('open'));
+document.getElementById('cancelEditUserModal').addEventListener('click', () =>
+  document.getElementById('editUserModal').classList.remove('open'));
+
+document.getElementById('editUserForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id  = document.getElementById('editUserId').value;
+  const err = document.getElementById('editUserError');
+  const btn = document.getElementById('editUserSaveBtn');
+  err.textContent = '';
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await api(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name:     document.getElementById('editUserName').value.trim(),
+        email:    document.getElementById('editUserEmail').value.trim(),
+        phone:    document.getElementById('editUserPhone').value.trim(),
+        timezone: document.getElementById('editUserTimezone').value,
+      }),
+    });
+    document.getElementById('editUserModal').classList.remove('open');
+    toast('User updated', 'success');
+    loadUsers();
+  } catch (e) {
+    err.textContent = e.message || 'Could not save changes';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
+});
 </script>
+
+<!-- Edit User Modal -->
+<div class="modal-backdrop" id="editUserModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Edit User</h2>
+      <button class="modal-close" id="closeEditUserModal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="editUserForm" novalidate>
+      <input type="hidden" id="editUserId" />
+      <div class="form-group">
+        <label for="editUserName">Full Name</label>
+        <input class="form-control" type="text" id="editUserName" required />
+      </div>
+      <div class="form-group">
+        <label for="editUserEmail">Email</label>
+        <input class="form-control" type="email" id="editUserEmail" required />
+      </div>
+      <div class="form-group">
+        <label for="editUserPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+        <input class="form-control" type="tel" id="editUserPhone" />
+      </div>
+      <div class="form-group">
+        <label for="editUserTimezone">Timezone</label>
+        <select class="form-control" id="editUserTimezone"></select>
+      </div>
+      <p id="editUserError" style="color:var(--danger);font-size:.85rem;margin:.5rem 0 0"></p>
+      <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.25rem">
+        <button type="button" class="btn btn-outline" id="cancelEditUserModal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="editUserSaveBtn">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
 </body>
 </html>

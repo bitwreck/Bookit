@@ -860,6 +860,36 @@ router.get('/users', requireAdmin, ah(async (req, res) => {
   });
 }));
 
+router.put('/users/:id', requireAdmin, ah(async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid user ID' });
+
+  const [[user]] = await db.execute('SELECT id, auth_source FROM users WHERE id = ?', [id]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.auth_source === 'ldap')
+    return res.status(400).json({ error: 'LDAP users cannot be edited — their details come from the directory.' });
+
+  const { name, email, phone, timezone } = req.body || {};
+  if (!name?.trim() || !email?.trim())
+    return res.status(400).json({ error: 'Name and email are required' });
+
+  // Check email uniqueness (excluding this user)
+  const [[existing]] = await db.execute(
+    'SELECT id FROM users WHERE email = ? AND id != ?', [email.trim().toLowerCase(), id]
+  );
+  if (existing) return res.status(409).json({ error: 'Email is already in use by another account' });
+
+  await db.execute(
+    'UPDATE users SET name = ?, email = ?, phone = ?, timezone = ? WHERE id = ?',
+    [name.trim(), email.trim().toLowerCase(), phone?.trim() || null, timezone || 'UTC', id]
+  );
+
+  const [[updated]] = await db.execute(
+    'SELECT id, name, email, phone, timezone, auth_source FROM users WHERE id = ?', [id]
+  );
+  res.json(updated);
+}));
+
 router.delete('/users/:id', requireAdmin, ah(async (req, res) => {
   const id = parseInt(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid user ID' });

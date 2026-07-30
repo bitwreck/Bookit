@@ -6,14 +6,27 @@
 CREATE DATABASE IF NOT EXISTS booking CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE booking;
 
+-- ── Resource categories ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS categories (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_category_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ── Resources ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS resources (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  category_id INT UNSIGNED  NOT NULL,
   name        VARCHAR(255)  NOT NULL,
   description TEXT,
   color       VARCHAR(7)    NOT NULL DEFAULT '#64748b',
   created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_resource_category FOREIGN KEY (category_id)
+    REFERENCES categories(id) ON DELETE RESTRICT,
+  INDEX idx_resource_category (category_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ── Registered users ───────────────────────────────────────
@@ -128,8 +141,12 @@ CREATE TABLE IF NOT EXISTS admins (
 INSERT IGNORE INTO admins (username, password_hash) VALUES
   ('admin', '$2a$10$Z6fAlO4p8cHqHdfOCyQ1meJXJoauznKobIeIa63ENU7PUp1oNsBR.');
 
+-- ── Seed: sample categories ────────────────────────────────
+INSERT IGNORE INTO categories (id, name) VALUES
+  (1, 'General');
+
 -- ── Seed: sample resources ─────────────────────────────────
-INSERT IGNORE INTO resources (id, name, description, color) VALUES
-  (1, 'Nexus Dashboard',       'RTP Lab rack 9',         '#0ea5e9'),
-  (2, 'UCSX Blade 1/1',      'Rack 1 Chassis 1',   '#f59e0b'),
-  (3, 'IMM Lab', 'RTP IMM rack 5',     '#10b981');
+INSERT IGNORE INTO resources (id, category_id, name, description, color) VALUES
+  (1, 1, 'Nexus Dashboard',  'RTP Lab rack 9',    '#0ea5e9'),
+  (2, 1, 'UCSX Blade 1/1',   'Rack 1 Chassis 1',  '#f59e0b'),
+  (3, 1, 'IMM Lab',          'RTP IMM rack 5',     '#10b981');

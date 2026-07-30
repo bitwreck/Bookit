@@ -562,44 +562,110 @@ router.get('/activity', ah(async (req, res) => {
 }));
 
 // ═══════════════════════════════════════════════════════════
+// Categories
+// ═══════════════════════════════════════════════════════════
+router.get('/categories', ah(async (_req, res) => {
+  const [rows] = await db.execute(
+    'SELECT id, name FROM categories ORDER BY name ASC'
+  );
+  res.json(rows);
+}));
+
+router.post('/categories', requireAdmin, ah(async (req, res) => {
+  const name = (req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  try {
+    const [result] = await db.execute(
+      'INSERT INTO categories (name) VALUES (?)', [name]
+    );
+    res.status(201).json({ id: result.insertId, name });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY')
+      return res.status(409).json({ error: 'A category with that name already exists.' });
+    throw err;
+  }
+}));
+
+router.put('/categories/:id', requireAdmin, ah(async (req, res) => {
+  const name = (req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  try {
+    const [result] = await db.execute(
+      'UPDATE categories SET name = ? WHERE id = ?', [name, req.params.id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ id: parseInt(req.params.id), name });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY')
+      return res.status(409).json({ error: 'A category with that name already exists.' });
+    throw err;
+  }
+}));
+
+router.delete('/categories/:id', requireAdmin, ah(async (req, res) => {
+  // Block deletion if any resources still use this category
+  const [[{ count }]] = await db.execute(
+    'SELECT COUNT(*) AS count FROM resources WHERE category_id = ?', [req.params.id]
+  );
+  if (count > 0)
+    return res.status(409).json({
+      error: `Cannot delete: ${count} resource(s) are assigned to this category. Reassign them first.`
+    });
+  const [result] = await db.execute('DELETE FROM categories WHERE id = ?', [req.params.id]);
+  if (result.affectedRows === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+}));
+
+// ═══════════════════════════════════════════════════════════
 // Resources
 // ═══════════════════════════════════════════════════════════
 router.get('/resources', ah(async (_req, res) => {
   const [rows] = await db.execute(
-    `SELECT r.*,
+    `SELECT r.*, c.name AS category_name,
             COUNT(a.id) AS booking_count
      FROM resources r
+     JOIN categories c ON c.id = r.category_id
      LEFT JOIN appointments a
             ON a.resource_id = r.id AND a.status != 'cancelled'
-     GROUP BY r.id, r.name, r.description, r.color, r.created_at, r.updated_at
-     ORDER BY booking_count DESC, r.name ASC`
+     GROUP BY r.id, r.name, r.description, r.color, r.category_id, c.name, r.created_at, r.updated_at
+     ORDER BY c.name ASC, r.name ASC`
   );
   res.json(rows);
 }));
 
 router.post('/resources', requireAdmin, ah(async (req, res) => {
-  const { name, description, color } = req.body || {};
-  if (!name) return res.status(400).json({ error: 'name is required' });
+  const { name, description, color, category_id } = req.body || {};
+  if (!name)        return res.status(400).json({ error: 'name is required' });
+  if (!category_id) return res.status(400).json({ error: 'category_id is required' });
 
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#64748b';
   const [result] = await db.execute(
-    'INSERT INTO resources (name, description, color) VALUES (?, ?, ?)',
-    [name, description || null, safeColor]
+    'INSERT INTO resources (name, description, color, category_id) VALUES (?, ?, ?, ?)',
+    [name, description || null, safeColor, category_id]
   );
-  const [rows] = await db.execute('SELECT * FROM resources WHERE id = ?', [result.insertId]);
+  const [rows] = await db.execute(
+    `SELECT r.*, c.name AS category_name FROM resources r
+     JOIN categories c ON c.id = r.category_id WHERE r.id = ?`,
+    [result.insertId]
+  );
   res.status(201).json(rows[0]);
 }));
 
 router.put('/resources/:id', requireAdmin, ah(async (req, res) => {
-  const { name, description, color } = req.body || {};
-  if (!name) return res.status(400).json({ error: 'name is required' });
+  const { name, description, color, category_id } = req.body || {};
+  if (!name)        return res.status(400).json({ error: 'name is required' });
+  if (!category_id) return res.status(400).json({ error: 'category_id is required' });
 
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#64748b';
   await db.execute(
-    'UPDATE resources SET name = ?, description = ?, color = ? WHERE id = ?',
-    [name, description || null, safeColor, req.params.id]
+    'UPDATE resources SET name = ?, description = ?, color = ?, category_id = ? WHERE id = ?',
+    [name, description || null, safeColor, category_id, req.params.id]
   );
-  const [rows] = await db.execute('SELECT * FROM resources WHERE id = ?', [req.params.id]);
+  const [rows] = await db.execute(
+    `SELECT r.*, c.name AS category_name FROM resources r
+     JOIN categories c ON c.id = r.category_id WHERE r.id = ?`,
+    [req.params.id]
+  );
   if (!rows[0]) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
 }));
@@ -615,6 +681,10 @@ router.delete('/resources/:id', requireAdmin, ah(async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.get('/appointments', ah(async (req, res) => {
   const { resource_id, start, end, status } = req.query;
+  // Support array of IDs for category filtering: resource_id[]=1&resource_id[]=2
+  const resourceIds = req.query['resource_id[]']
+    ? [].concat(req.query['resource_id[]']).map(Number).filter(Boolean)
+    : null;
 
   let sql = `
     SELECT a.*, r.name AS resource_name, r.color AS resource_color
@@ -624,7 +694,10 @@ router.get('/appointments', ah(async (req, res) => {
   `;
   const params = [];
 
-  if (resource_id) { sql += ' AND a.resource_id = ?';  params.push(resource_id); }
+  if (resourceIds && resourceIds.length) {
+    sql += ` AND a.resource_id IN (${resourceIds.map(() => '?').join(',')})`;
+    params.push(...resourceIds);
+  } else if (resource_id) { sql += ' AND a.resource_id = ?'; params.push(resource_id); }
   if (start)        { sql += ' AND a.end_time >= ?';    params.push(start); }
   if (end)          { sql += ' AND a.start_time <= ?';  params.push(end); }
   if (status && status !== 'all') { sql += ' AND a.status = ?'; params.push(status); }

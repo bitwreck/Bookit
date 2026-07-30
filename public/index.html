@@ -5,14 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Resource Booking</title>
 
-<!-- FullCalendar v6 + Luxon timezone adapter -->
-<link  href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/luxon3@6.1.11/index.global.min.js"></script>
-
-<!-- Lucide icons -->
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<!-- Vendor assets — self-hosted (run: node scripts/download-vendor.js) -->
+<link  href="/vendor/fullcalendar.min.css" rel="stylesheet" />
+<script src="/vendor/fullcalendar.min.js"></script>
+<script src="/vendor/luxon.min.js"></script>
+<script src="/vendor/fullcalendar-luxon3.min.js"></script>
+<script src="/vendor/lucide.min.js"></script>
 
 <style>
 /* ── CSS Custom Properties ─────────────────────────────── */
@@ -144,20 +142,41 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   gap: .6rem;
-  padding: .45rem .6rem;
+  padding: .38rem .6rem .38rem 1.4rem;
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
-  font-size: .9rem;
+  font-size: .85rem;
   transition: background .15s;
 }
 .resource-item:hover { background: var(--surface2); }
 .resource-item.active { background: var(--surface2); font-weight: 600; }
 .resource-dot {
-  width: 11px; height: 11px;
+  width: 9px; height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
 }
+/* Category group header */
+.cat-group { margin-bottom: .15rem; }
+.cat-header {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .45rem .6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: .82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  transition: background .15s, color .15s;
+}
+.cat-header:hover { background: var(--surface2); color: var(--text); }
+.cat-header.active { background: var(--surface2); color: var(--text); }
+.cat-header svg { transition: transform .2s; flex-shrink: 0; }
+.cat-header.collapsed svg { transform: rotate(-90deg); }
+.cat-resources { overflow: hidden; transition: max-height .2s ease; }
+.cat-resources.collapsed { max-height: 0 !important; }
 /* Top-users leaderboard */
 .top-user-row {
   display: flex;
@@ -648,9 +667,9 @@ select.form-control {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
         </svg>
-        Top 5 Resources
+        All Resources
       </div>
-      <ul class="resource-list" id="resourceList"></ul>
+      <div id="resourceList"></div>
     </div>
 
     <!-- Timezone -->
@@ -1007,7 +1026,8 @@ const API = '/api';
 let resources         = [];
 let appointments      = [];
 let calendar;
-let activeFilter      = null;  // null = all
+let activeFilter      = null;  // null = all; number = resource id; 'cat-N' = category
+let collapsedCats     = new Set(); // category IDs the user has collapsed
 let currentTz         = Intl.DateTimeFormat().resolvedOptions().timeZone;
 let requireCancelCode = true;  // default on; overridden by settings fetch
 let ldapEnabled       = false; // overridden by settings fetch
@@ -1231,35 +1251,110 @@ function renderResourceSidebar() {
   const all  = document.getElementById('filterAll');
 
   list.innerHTML = '';
+  all.classList.toggle('active', activeFilter === null);
 
-  // Resources arrive pre-sorted by booking_count DESC from the API.
-  // Show only the top 5 most requested.
-  const top5 = resources.slice(0, 5);
-
-  top5.forEach(r => {
-    const li = document.createElement('li');
-    li.className   = 'resource-item' + (activeFilter === r.id ? ' active' : '');
-    li.dataset.id  = r.id;
-    li.innerHTML   = `
-      <span class="resource-dot" style="background:${r.color}"></span>
-      <span>${r.name}</span>
-      <span class="resource-count" id="cnt-${r.id}">0</span>
-    `;
-    li.addEventListener('click', () => setFilter(r.id));
-    list.appendChild(li);
+  // Group resources by category
+  const catMap = new Map(); // category_id → { name, resources[] }
+  resources.forEach(r => {
+    const key = r.category_id;
+    if (!catMap.has(key)) catMap.set(key, { name: r.category_name || 'Uncategorized', resources: [] });
+    catMap.get(key).resources.push(r);
   });
 
-  all.classList.toggle('active', activeFilter === null);
+  catMap.forEach((cat, catId) => {
+    const catKey      = `cat-${catId}`;
+    const isActive    = activeFilter === catKey;
+    const isCollapsed = collapsedCats.has(catId);
+
+    const group = document.createElement('div');
+    group.className = 'cat-group';
+    group.dataset.catId = catId;
+
+    // Category header row
+    const header = document.createElement('div');
+    header.className = `cat-header${isActive ? ' active' : ''}${isCollapsed ? ' collapsed' : ''}`;
+    header.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+      <span style="flex:1">${cat.name}</span>
+      <span class="resource-count" id="catcnt-${catId}" style="margin-left:auto">0</span>
+    `;
+
+    // Toggle collapse on chevron click; filter on label click
+    header.addEventListener('click', (e) => {
+      // If clicking the count badge or chevron, just toggle collapse
+      const chevron = header.querySelector('svg');
+      const badge   = header.querySelector(`#catcnt-${catId}`);
+      if (e.target === chevron || e.target.closest('svg') === chevron) {
+        toggleCatCollapse(catId, header, resourceUl);
+      } else {
+        // Filter to entire category
+        setFilter(catKey);
+      }
+    });
+
+    // Chevron click area
+    header.querySelector('svg').style.cursor = 'pointer';
+
+    const resourceUl = document.createElement('ul');
+    resourceUl.className = `resource-list cat-resources${isCollapsed ? ' collapsed' : ''}`;
+    if (!isCollapsed) resourceUl.style.maxHeight = (cat.resources.length * 40) + 'px';
+
+    cat.resources.forEach(r => {
+      const li = document.createElement('li');
+      li.className  = 'resource-item' + (activeFilter === r.id ? ' active' : '');
+      li.dataset.id = r.id;
+      li.innerHTML  = `
+        <span class="resource-dot" style="background:${r.color}"></span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</span>
+        <span class="resource-count" id="cnt-${r.id}">0</span>
+      `;
+      li.addEventListener('click', (e) => { e.stopPropagation(); setFilter(r.id); });
+      resourceUl.appendChild(li);
+    });
+
+    group.appendChild(header);
+    group.appendChild(resourceUl);
+    list.appendChild(group);
+  });
+}
+
+function toggleCatCollapse(catId, header, resourceUl) {
+  if (collapsedCats.has(catId)) {
+    collapsedCats.delete(catId);
+    header.classList.remove('collapsed');
+    resourceUl.classList.remove('collapsed');
+    resourceUl.style.maxHeight = resourceUl.querySelectorAll('.resource-item').length * 40 + 'px';
+  } else {
+    collapsedCats.add(catId);
+    header.classList.add('collapsed');
+    resourceUl.classList.add('collapsed');
+  }
 }
 
 function renderResourceSelect() {
   const sel = document.getElementById('bResource');
   sel.innerHTML = '<option value="">Select a resource…</option>';
+
+  // Group by category
+  const catMap = new Map();
   resources.forEach(r => {
-    const opt = document.createElement('option');
-    opt.value = r.id;
-    opt.textContent = r.name;
-    sel.appendChild(opt);
+    const key = r.category_id;
+    if (!catMap.has(key)) catMap.set(key, { name: r.category_name || 'Uncategorized', resources: [] });
+    catMap.get(key).resources.push(r);
+  });
+
+  catMap.forEach(cat => {
+    const group = document.createElement('optgroup');
+    group.label = cat.name;
+    cat.resources.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.name;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
   });
 }
 
@@ -1315,9 +1410,16 @@ function startActivityPolling() {
 
 function setFilter(id) {
   activeFilter = id;
+
+  // Highlight resource items
   document.querySelectorAll('.resource-item').forEach(el =>
-    el.classList.toggle('active', parseInt(el.dataset.id) === id)
+    el.classList.toggle('active', id === parseInt(el.dataset.id))
   );
+  // Highlight category headers
+  document.querySelectorAll('.cat-header').forEach(el => {
+    const catKey = 'cat-' + el.closest('.cat-group')?.dataset?.catId;
+    el.classList.toggle('active', id === catKey);
+  });
   document.getElementById('filterAll').classList.toggle('active', id === null);
   if (calendar) calendar.refetchEvents();
 }
@@ -1326,14 +1428,24 @@ document.getElementById('filterAll').addEventListener('click', () => setFilter(n
 
 // Update appointment counts in sidebar
 function updateCounts(events) {
-  const counts = {};
+  const resCounts = {};
+  const catCounts = {};
+
   events.forEach(e => {
     const rid = e.extendedProps?.resource_id;
-    counts[rid] = (counts[rid] || 0) + 1;
+    const r   = resources.find(x => x.id === rid);
+    resCounts[rid] = (resCounts[rid] || 0) + 1;
+    if (r) catCounts[r.category_id] = (catCounts[r.category_id] || 0) + 1;
   });
+
   resources.forEach(r => {
     const el = document.getElementById('cnt-' + r.id);
-    if (el) el.textContent = counts[r.id] || 0;
+    if (el) el.textContent = resCounts[r.id] || 0;
+  });
+  // Update category totals
+  Object.entries(catCounts).forEach(([catId, count]) => {
+    const el = document.getElementById('catcnt-' + catId);
+    if (el) el.textContent = count;
   });
 }
 
@@ -1361,7 +1473,16 @@ function initCalendar() {
     events: async (info, successCb, failureCb) => {
       try {
         let url = `/appointments?start=${info.startStr}&end=${info.endStr}`;
-        if (activeFilter !== null) url += `&resource_id=${activeFilter}`;
+        if (activeFilter !== null) {
+          if (typeof activeFilter === 'string' && activeFilter.startsWith('cat-')) {
+            // Category filter — include all resource IDs in that category
+            const catId = parseInt(activeFilter.replace('cat-', ''));
+            const ids   = resources.filter(r => r.category_id === catId).map(r => r.id);
+            if (ids.length) url += '&' + ids.map(id => `resource_id[]=${id}`).join('&');
+          } else {
+            url += `&resource_id=${activeFilter}`;
+          }
+        }
         const data = await apiFetch(url);
         const events = data.map(a => ({
           id:    String(a.id),

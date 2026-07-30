@@ -367,6 +367,13 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
         </svg>
         Resources
       </div>
+      <div class="nav-item" data-page="categories">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        Categories
+      </div>
       <div class="nav-item" data-page="activitylog">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
@@ -503,6 +510,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
                 <tr>
                   <th>Color</th>
                   <th>Name</th>
+                  <th>Category</th>
                   <th>Description</th>
                   <th>Bookings</th>
                   <th>Actions</th>
@@ -515,6 +523,38 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
             <div class="empty-icon">📦</div>
             <div class="empty-title">No resources yet</div>
             <p>Add your first resource above.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Categories ───────────────────────────────── -->
+      <div class="page" id="page-categories">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+          <h1 style="font-size:1.4rem;font-weight:800">Categories</h1>
+          <button class="btn btn-primary btn-sm" id="addCategoryBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Category
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Resources</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="categoryTable"></tbody>
+            </table>
+          </div>
+          <div id="categoryEmpty" class="empty" style="display:none">
+            <div class="empty-icon">🗂️</div>
+            <div class="empty-title">No categories yet</div>
+            <p>Add a category before creating resources.</p>
           </div>
         </div>
       </div>
@@ -792,6 +832,33 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 </div>
 
 <!-- ════════════════════════════════════════════════════ -->
+<!-- Category Modal -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="categoryModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="categoryModalTitle">Add Category</h2>
+      <button class="modal-close" id="closeCategoryModal">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <form id="categoryForm" novalidate>
+      <input type="hidden" id="cId" />
+      <div class="form-group">
+        <label for="cName">Category Name *</label>
+        <input class="form-control" type="text" id="cName" placeholder="e.g. Cameras" required />
+        <span class="form-error" id="errCName" style="display:none">Name is required.</span>
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:.5rem">
+        <button type="button" class="btn btn-outline" id="cancelCategoryModal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="saveCategoryBtn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Resource Modal -->
 <!-- ════════════════════════════════════════════════════ -->
 <div class="modal-backdrop" id="resourceModal">
@@ -806,6 +873,13 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
     </div>
     <form id="resourceForm" novalidate>
       <input type="hidden" id="rId" />
+      <div class="form-group">
+        <label for="rCategory">Category *</label>
+        <select class="form-control" id="rCategory" required>
+          <option value="">— select a category —</option>
+        </select>
+        <span class="form-error" id="errRCategory" style="display:none">Category is required.</span>
+      </div>
       <div class="form-group">
         <label for="rName">Name *</label>
         <input class="form-control" type="text" id="rName" placeholder="e.g. Camera A" required />
@@ -951,8 +1025,9 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 // Auth & State
 // ════════════════════════════════════════════════════════
 const API = '/api';
-let token     = localStorage.getItem('bt-admin-token') || '';
-let resources = [];
+let token        = localStorage.getItem('bt-admin-token') || '';
+let resources    = [];
+let categories   = [];
 let appointments = [];
 
 const COLORS = [
@@ -1098,8 +1173,14 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // Load all data
 // ════════════════════════════════════════════════════════
 async function loadAll() {
-  await Promise.all([loadResources(), loadAppointments()]);
+  await Promise.all([loadCategories(), loadResources(), loadAppointments()]);
   renderDashboard();
+}
+
+async function loadCategories() {
+  categories = await api('/categories');
+  renderCategoryTable();
+  populateCategoryDropdown();
 }
 
 async function loadResources() {
@@ -1280,6 +1361,47 @@ document.getElementById('cancelApptModal').addEventListener('click', () =>
 // ════════════════════════════════════════════════════════
 // Resources
 // ════════════════════════════════════════════════════════
+function renderCategoryTable() {
+  const tbody = document.getElementById('categoryTable');
+  const empty = document.getElementById('categoryEmpty');
+  if (!tbody) return;
+  if (!categories.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = categories.map(c => {
+    const count = resources.filter(r => r.category_id === c.id).length;
+    return `
+      <tr>
+        <td style="font-weight:600">${c.name}</td>
+        <td style="color:var(--text-muted)">${count} resource${count !== 1 ? 's' : ''}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-icon" onclick="editCategory(${c.id})" title="Edit" style="margin-right:4px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="deleteCategory(${c.id},'${c.name.replace(/'/g,"\\'")}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function populateCategoryDropdown(selectedId) {
+  const sel = document.getElementById('rCategory');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— select a category —</option>';
+  categories.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.name;
+    if (selectedId && c.id === parseInt(selectedId)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
 function renderResourceTable() {
   const tbody = document.getElementById('resourceTable');
   const empty = document.getElementById('resourceEmpty');
@@ -1296,6 +1418,7 @@ function renderResourceTable() {
       <tr>
         <td><span class="rdot" style="background:${r.color};width:18px;height:18px;border-radius:4px"></span></td>
         <td style="font-weight:600">${r.name}</td>
+        <td style="color:var(--text-muted);font-size:.82rem">${r.category_name || '–'}</td>
         <td style="color:var(--text-muted)">${r.description || '–'}</td>
         <td>${bookings}</td>
         <td style="white-space:nowrap">
@@ -1365,14 +1488,78 @@ function renderSwatches(selectedColor) {
   });
 }
 
+// ── Categories ───────────────────────────────────────────
+document.getElementById('addCategoryBtn').addEventListener('click', () => {
+  document.getElementById('cId').value   = '';
+  document.getElementById('cName').value = '';
+  document.getElementById('errCName').style.display = 'none';
+  document.getElementById('categoryModalTitle').textContent = 'Add Category';
+  document.getElementById('categoryModal').classList.add('open');
+  document.getElementById('cName').focus();
+});
+
+function editCategory(id) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('cId').value   = c.id;
+  document.getElementById('cName').value = c.name;
+  document.getElementById('errCName').style.display = 'none';
+  document.getElementById('categoryModalTitle').textContent = 'Edit Category';
+  document.getElementById('categoryModal').classList.add('open');
+  document.getElementById('cName').focus();
+}
+
+document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id   = document.getElementById('cId').value;
+  const name = document.getElementById('cName').value.trim();
+  const errEl = document.getElementById('errCName');
+  if (!name) { errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  try {
+    if (id) {
+      await api(`/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name }) });
+      toast('Category updated', 'success');
+    } else {
+      await api('/categories', { method: 'POST', body: JSON.stringify({ name }) });
+      toast('Category added', 'success');
+    }
+    document.getElementById('categoryModal').classList.remove('open');
+    await loadAll();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+function deleteCategory(id, name) {
+  openConfirm(
+    'Delete Category',
+    `Delete category "<strong>${name}</strong>"? You must reassign all resources in this category first.`,
+    async () => {
+      try {
+        await api(`/categories/${id}`, { method: 'DELETE' });
+        await loadAll();
+        toast('Category deleted');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+  );
+}
+
+[document.getElementById('closeCategoryModal'),
+ document.getElementById('cancelCategoryModal')].forEach(btn =>
+  btn?.addEventListener('click', () =>
+    document.getElementById('categoryModal').classList.remove('open')
+  )
+);
+
 // ── Add resource ─────────────────────────────────────────
 document.getElementById('addResourceBtn').addEventListener('click', () => {
-  document.getElementById('rId').value   = '';
-  document.getElementById('rName').value = '';
-  document.getElementById('rDesc').value = '';
+  document.getElementById('rId').value    = '';
+  document.getElementById('rName').value  = '';
+  document.getElementById('rDesc').value  = '';
   document.getElementById('rColor').value = '#64748b';
   document.getElementById('resourceModalTitle').textContent = 'Add Resource';
-  document.getElementById('errRName').style.display = 'none';
+  document.getElementById('errRName').style.display     = 'none';
+  document.getElementById('errRCategory').style.display = 'none';
+  populateCategoryDropdown();
   renderSwatches('#64748b');
   document.getElementById('resourceModal').classList.add('open');
 });
@@ -1380,27 +1567,34 @@ document.getElementById('addResourceBtn').addEventListener('click', () => {
 function editResource(id) {
   const r = resources.find(x => x.id === id);
   if (!r) return;
-  document.getElementById('rId').value   = r.id;
-  document.getElementById('rName').value = r.name;
-  document.getElementById('rDesc').value = r.description || '';
+  document.getElementById('rId').value    = r.id;
+  document.getElementById('rName').value  = r.name;
+  document.getElementById('rDesc').value  = r.description || '';
   document.getElementById('rColor').value = r.color;
   document.getElementById('resourceModalTitle').textContent = 'Edit Resource';
-  document.getElementById('errRName').style.display = 'none';
+  document.getElementById('errRName').style.display     = 'none';
+  document.getElementById('errRCategory').style.display = 'none';
+  populateCategoryDropdown(r.category_id);
   renderSwatches(r.color);
   document.getElementById('resourceModal').classList.add('open');
 }
 
 document.getElementById('resourceForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const id    = document.getElementById('rId').value;
-  const name  = document.getElementById('rName').value.trim();
-  const errEl = document.getElementById('errRName');
+  const id          = document.getElementById('rId').value;
+  const name        = document.getElementById('rName').value.trim();
+  const category_id = document.getElementById('rCategory').value;
+  const errName     = document.getElementById('errRName');
+  const errCat      = document.getElementById('errRCategory');
 
-  if (!name) { errEl.style.display = 'block'; return; }
-  errEl.style.display = 'none';
+  let valid = true;
+  if (!name)        { errName.style.display = 'block'; valid = false; } else errName.style.display = 'none';
+  if (!category_id) { errCat.style.display  = 'block'; valid = false; } else errCat.style.display  = 'none';
+  if (!valid) return;
 
   const payload = {
     name,
+    category_id: parseInt(category_id),
     description: document.getElementById('rDesc').value.trim() || null,
     color:       document.getElementById('rColor').value,
   };

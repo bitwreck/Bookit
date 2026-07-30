@@ -435,25 +435,74 @@ async function getSetting(key, defaultValue = null) {
   return row ? row.value : defaultValue;
 }
 
-/** Public: returns non-sensitive settings the frontend needs. */
-router.get('/settings', ah(async (_req, res) => {
+/** Settings — public gets minimal set; admin JWT gets full set (minus bind password). */
+router.get('/settings', ah(async (req, res) => {
   const requireCancelCode = await getSetting('require_cancel_code', 'true');
-  res.json({ require_cancel_code: requireCancelCode === 'true' });
+
+  // Check for admin token to return full settings
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  let isAdmin = false;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      isAdmin = decoded.type === 'admin';
+    } catch {}
+  }
+
+  if (!isAdmin) {
+    // Public: only what the frontend needs to show/hide UI elements
+    const ldapEnabled = await getSetting('ldap_enabled', 'false');
+    return res.json({
+      require_cancel_code: requireCancelCode === 'true',
+      ldap_enabled: ldapEnabled === 'true',
+    });
+  }
+
+  // Admin: full settings (bind password intentionally omitted)
+  const [rows] = await db.execute("SELECT `key`, `value` FROM settings");
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+  res.json({
+    require_cancel_code: s.require_cancel_code === 'true',
+    ldap_enabled:        s.ldap_enabled === 'true',
+    ldap_url:            s.ldap_url            || '',
+    ldap_base_dn:        s.ldap_base_dn        || '',
+    ldap_bind_dn:        s.ldap_bind_dn        || '',
+    ldap_user_filter:    s.ldap_user_filter     || '(mail={{username}})',
+    ldap_name_attr:      s.ldap_name_attr       || 'cn',
+    ldap_email_attr:     s.ldap_email_attr      || 'mail',
+    ldap_phone_attr:     s.ldap_phone_attr      || 'telephoneNumber',
+  });
 }));
 
 /** Admin: update settings. */
 router.put('/settings', requireAdmin, ah(async (req, res) => {
-  const { require_cancel_code } = req.body || {};
+  const {
+    require_cancel_code,
+    ldap_enabled, ldap_url, ldap_base_dn, ldap_bind_dn, ldap_bind_pass,
+    ldap_user_filter, ldap_name_attr, ldap_email_attr, ldap_phone_attr,
+  } = req.body || {};
 
-  if (require_cancel_code !== undefined) {
-    await db.execute(
-      'INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
-      ['require_cancel_code', require_cancel_code ? 'true' : 'false']
-    );
-  }
+  const upsert = async (key, value) => db.execute(
+    'INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
+    [key, value]
+  );
 
-  const updated = await getSetting('require_cancel_code', 'true');
-  res.json({ require_cancel_code: updated === 'true' });
+  if (require_cancel_code !== undefined)
+    await upsert('require_cancel_code', require_cancel_code ? 'true' : 'false');
+
+  if (ldap_enabled !== undefined) await upsert('ldap_enabled', ldap_enabled ? 'true' : 'false');
+  if (ldap_url       !== undefined) await upsert('ldap_url',       ldap_url);
+  if (ldap_base_dn   !== undefined) await upsert('ldap_base_dn',   ldap_base_dn);
+  if (ldap_bind_dn   !== undefined) await upsert('ldap_bind_dn',   ldap_bind_dn);
+  if (ldap_bind_pass !== undefined) await upsert('ldap_bind_pass', ldap_bind_pass);
+  if (ldap_user_filter !== undefined) await upsert('ldap_user_filter', ldap_user_filter);
+  if (ldap_name_attr   !== undefined) await upsert('ldap_name_attr',   ldap_name_attr);
+  if (ldap_email_attr  !== undefined) await upsert('ldap_email_attr',  ldap_email_attr);
+  if (ldap_phone_attr  !== undefined) await upsert('ldap_phone_attr',  ldap_phone_attr);
+
+  res.json({ ok: true });
 }));
 
 // ═══════════════════════════════════════════════════════════
@@ -805,6 +854,17 @@ router.get('/users', requireAdmin, ah(async (req, res) => {
     pages: Math.ceil(total / limit),
     data: rows.map(r => ({ ...r, created_at: toISOLocal(r.created_at) })),
   });
+}));
+
+router.delete('/users/:id', requireAdmin, ah(async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid user ID' });
+
+  const [[user]] = await db.execute('SELECT id, name, email FROM users WHERE id = ?', [id]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  await db.execute('DELETE FROM users WHERE id = ?', [id]);
+  res.json({ ok: true, message: `User ${user.email} deleted` });
 }));
 
 // ── ICS download ───────────────────────────────────────────

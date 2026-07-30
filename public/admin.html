@@ -588,6 +588,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
                   <th>Auth</th>
                   <th>Bookings</th>
                   <th>Registered</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody id="usersTable"></tbody>
@@ -1656,6 +1657,12 @@ async function loadUsers() {
           </span>
         </td>
         <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${fmtDt(u.created_at)}</td>
+        <td>
+          <button onclick="deleteUser(${u.id}, '${u.email.replace(/'/g,"\\'")}', '${u.name.replace(/'/g,"\\'")}'"
+            style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:.8rem;padding:.2rem .5rem;
+                   border-radius:4px;border:1px solid var(--danger);opacity:.75;transition:opacity .15s"
+            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity='.75'">Delete</button>
+        </td>
       </tr>
     `).join('');
 
@@ -1693,6 +1700,17 @@ async function loadUsers() {
 function gotoUsersPage(p) {
   usersPage = p;
   loadUsers();
+}
+
+async function deleteUser(id, email, name) {
+  if (!confirm(`Delete user "${name}" (${email})?\n\nThis cannot be undone. Their past bookings will remain in the system.`)) return;
+  try {
+    await api(`/users/${id}`, { method: 'DELETE' });
+    toast(`User ${email} deleted`, 'success');
+    loadUsers();
+  } catch (err) {
+    toast(err.message || 'Could not delete user', 'error');
+  }
 }
 
 document.getElementById('usersLimit')?.addEventListener('change', e => {

@@ -1321,7 +1321,7 @@ function deleteResource(id, name) {
 // ════════════════════════════════════════════════════════
 async function loadSettings() {
   try {
-    const s = await api('/settings');
+    const s = await api('/admin/settings');
     document.getElementById('settingCancelCode').checked = s.require_cancel_code;
 
     // LDAP fields

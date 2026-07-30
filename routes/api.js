@@ -435,44 +435,31 @@ async function getSetting(key, defaultValue = null) {
   return row ? row.value : defaultValue;
 }
 
-/** Settings — public gets minimal set; admin JWT gets full set (minus bind password). */
-router.get('/settings', ah(async (req, res) => {
+/** Public: minimal settings needed by the public frontend. */
+router.get('/settings', ah(async (_req, res) => {
   const requireCancelCode = await getSetting('require_cancel_code', 'true');
+  const ldapEnabled       = await getSetting('ldap_enabled', 'false');
+  res.json({
+    require_cancel_code: requireCancelCode === 'true',
+    ldap_enabled:        ldapEnabled === 'true',
+  });
+}));
 
-  // Check for admin token to return full settings
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  let isAdmin = false;
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      isAdmin = decoded.type === 'admin';
-    } catch {}
-  }
-
-  if (!isAdmin) {
-    // Public: only what the frontend needs to show/hide UI elements
-    const ldapEnabled = await getSetting('ldap_enabled', 'false');
-    return res.json({
-      require_cancel_code: requireCancelCode === 'true',
-      ldap_enabled: ldapEnabled === 'true',
-    });
-  }
-
-  // Admin: full settings (bind password intentionally omitted)
+/** Admin: full settings (bind password intentionally omitted). */
+router.get('/admin/settings', requireAdmin, ah(async (_req, res) => {
   const [rows] = await db.execute("SELECT `key`, `value` FROM settings");
   const s = {};
   rows.forEach(r => { s[r.key] = r.value; });
   res.json({
     require_cancel_code: s.require_cancel_code === 'true',
     ldap_enabled:        s.ldap_enabled === 'true',
-    ldap_url:            s.ldap_url            || '',
-    ldap_base_dn:        s.ldap_base_dn        || '',
-    ldap_bind_dn:        s.ldap_bind_dn        || '',
-    ldap_user_filter:    s.ldap_user_filter     || '(mail={{username}})',
-    ldap_name_attr:      s.ldap_name_attr       || 'cn',
-    ldap_email_attr:     s.ldap_email_attr      || 'mail',
-    ldap_phone_attr:     s.ldap_phone_attr      || 'telephoneNumber',
+    ldap_url:            s.ldap_url          || '',
+    ldap_base_dn:        s.ldap_base_dn      || '',
+    ldap_bind_dn:        s.ldap_bind_dn      || '',
+    ldap_user_filter:    s.ldap_user_filter  || '(mail={{username}})',
+    ldap_name_attr:      s.ldap_name_attr    || 'cn',
+    ldap_email_attr:     s.ldap_email_attr   || 'mail',
+    ldap_phone_attr:     s.ldap_phone_attr   || 'telephoneNumber',
   });
 }));
 

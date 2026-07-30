@@ -854,6 +854,42 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 
 <div id="toast"></div>
 
+<!-- Edit User Modal -->
+<div class="modal-backdrop" id="editUserModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Edit User</h2>
+      <button class="modal-close" id="closeEditUserModal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="editUserForm" novalidate>
+      <input type="hidden" id="editUserId" />
+      <div class="form-group">
+        <label for="editUserName">Full Name</label>
+        <input class="form-control" type="text" id="editUserName" required />
+      </div>
+      <div class="form-group">
+        <label for="editUserEmail">Email</label>
+        <input class="form-control" type="email" id="editUserEmail" required />
+      </div>
+      <div class="form-group">
+        <label for="editUserPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+        <input class="form-control" type="tel" id="editUserPhone" />
+      </div>
+      <div class="form-group">
+        <label for="editUserTimezone">Timezone</label>
+        <select class="form-control" id="editUserTimezone"></select>
+      </div>
+      <p id="editUserError" style="color:var(--danger);font-size:.85rem;margin:.5rem 0 0"></p>
+      <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.25rem">
+        <button type="button" class="btn btn-outline" id="cancelEditUserModal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="editUserSaveBtn">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 // ════════════════════════════════════════════════════════
 // Auth & State
@@ -1662,7 +1698,9 @@ async function loadUsers() {
           <button onclick="openEditUser(${u.id}, '${u.name.replace(/'/g,"\\'")}', '${u.email.replace(/'/g,"\\'")}', '${(u.phone||'').replace(/'/g,"\\'")}', '${u.timezone||'UTC'}')"
             style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:.8rem;padding:.2rem .5rem;
                    border-radius:4px;border:1px solid var(--primary);opacity:.75;transition:opacity .15s"
-            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity='.75'">Edit</button>
+            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity='.75'" title="Edit user">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
           ` : ''}
           <button onclick="deleteUser(${u.id}, '${u.email.replace(/'/g,"\\'")}', '${u.name.replace(/'/g,"\\'")}'"
             style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:.8rem;padding:.2rem .5rem;
@@ -1819,41 +1857,5 @@ document.getElementById('editUserForm').addEventListener('submit', async e => {
   }
 });
 </script>
-
-<!-- Edit User Modal -->
-<div class="modal-backdrop" id="editUserModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 class="modal-title">Edit User</h2>
-      <button class="modal-close" id="closeEditUserModal">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="editUserForm" novalidate>
-      <input type="hidden" id="editUserId" />
-      <div class="form-group">
-        <label for="editUserName">Full Name</label>
-        <input class="form-control" type="text" id="editUserName" required />
-      </div>
-      <div class="form-group">
-        <label for="editUserEmail">Email</label>
-        <input class="form-control" type="email" id="editUserEmail" required />
-      </div>
-      <div class="form-group">
-        <label for="editUserPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
-        <input class="form-control" type="tel" id="editUserPhone" />
-      </div>
-      <div class="form-group">
-        <label for="editUserTimezone">Timezone</label>
-        <select class="form-control" id="editUserTimezone"></select>
-      </div>
-      <p id="editUserError" style="color:var(--danger);font-size:.85rem;margin:.5rem 0 0"></p>
-      <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.25rem">
-        <button type="button" class="btn btn-outline" id="cancelEditUserModal">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="editUserSaveBtn">Save Changes</button>
-      </div>
-    </form>
-  </div>
-</div>
 </body>
 </html>

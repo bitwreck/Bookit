@@ -718,7 +718,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
             <div class="toggle-row" style="margin-bottom:1.25rem">
               <div>
                 <div class="toggle-label">Enable automatic purge</div>
-                <div class="toggle-sub">Automatically delete old appointments and their activity log entries on a recurring schedule. Users and LDAP logs are kept.</div>
+                <div class="toggle-sub">Automatically delete old appointments, activity log entries, and LDAP log entries on a recurring schedule. User accounts are always kept.</div>
               </div>
               <label class="toggle"><input type="checkbox" id="purgeEnabled" /><span class="slider"></span></label>
             </div>
@@ -1570,7 +1570,7 @@ document.getElementById('purgeRunNowBtn').addEventListener('click', async () => 
   try {
     const data = await api('/admin/purge', { method: 'POST' });
     result.style.cssText = 'display:block;color:#16a34a';
-    result.textContent   = `✓ Deleted ${data.deleted} appointment(s) and ${data.logsDeleted} activity log entry/entries older than ${data.cutoff}`;
+    result.textContent   = `✓ Deleted ${data.deleted} appointment(s), ${data.logsDeleted} activity log and ${data.ldapLogsDeleted} LDAP log entry/entries older than ${data.cutoff}`;
     document.getElementById('purgeLastRun').textContent = new Date(data.ranAt).toLocaleString();
   } catch (err) {
     result.style.cssText = 'display:block;color:#dc2626';

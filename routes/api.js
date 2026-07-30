@@ -991,14 +991,18 @@ async function runPurge() {
     "DELETE FROM activity_log WHERE created_at < ?", [cutoffStr]
   );
 
+  const [ldapLogResult] = await db.execute(
+    "DELETE FROM ldap_log WHERE created_at < ?", [cutoffStr]
+  );
+
   const now = new Date().toISOString();
   await db.execute(
     "INSERT INTO settings (`key`, `value`) VALUES ('purge_last_run', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
     [now]
   );
 
-  console.log(`[Purge] Deleted ${apptResult.affectedRows} appointment(s) and ${logResult.affectedRows} activity log entry/entries older than ${s.purge_retention_value} ${s.purge_retention_unit} (cutoff: ${cutoffStr})`);
-  return { deleted: apptResult.affectedRows, logsDeleted: logResult.affectedRows, cutoff: cutoffStr, ranAt: now };
+  console.log(`[Purge] Deleted ${apptResult.affectedRows} appointment(s), ${logResult.affectedRows} activity log entry/entries, ${ldapLogResult.affectedRows} LDAP log entry/entries older than ${s.purge_retention_value} ${s.purge_retention_unit} (cutoff: ${cutoffStr})`);
+  return { deleted: apptResult.affectedRows, logsDeleted: logResult.affectedRows, ldapLogsDeleted: ldapLogResult.affectedRows, cutoff: cutoffStr, ranAt: now };
 }
 
 /** Manual purge trigger (admin only). */

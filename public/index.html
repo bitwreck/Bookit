@@ -673,8 +673,11 @@ select.form-control {
     </div>
 
     <!-- Timezone -->
-    <div class="card">
-      <div class="card-title">Timezone</div>
+    <div class="card" id="tzCard">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Timezone</span>
+        <span id="tzProfileNote" style="display:none;font-size:.72rem;font-weight:400;color:var(--text-muted)">from profile</span>
+      </div>
       <select class="tz-select" id="tzSelect"></select>
     </div>
 
@@ -2041,6 +2044,9 @@ function updateAuthUI() {
   const badge      = document.getElementById('sessionBadge');
   const badgeTxt   = document.getElementById('sessionBadgeText');
 
+  const tzSel   = document.getElementById('tzSelect');
+  const tzNote  = document.getElementById('tzProfileNote');
+
   if (userSession) {
     sessionUI.style.display   = 'flex';
     signInBtn.style.display   = 'none';
@@ -2050,11 +2056,19 @@ function updateAuthUI() {
       badge.style.display  = 'flex';
       badgeTxt.textContent = `Signed in as ${userSession.name} (${userSession.email})`;
     }
+    // Lock timezone to user profile — manual override hidden
+    if (tzSel)  { tzSel.disabled = true; tzSel.style.opacity = '.6'; tzSel.style.cursor = 'not-allowed'; }
+    if (tzNote) tzNote.style.display = '';
   } else {
     sessionUI.style.display   = 'none';
     signInBtn.style.display   = '';
     openBookBtn.style.display = 'none';
     if (badge) badge.style.display = 'none';
+    // Restore manual timezone picker when logged out
+    if (tzSel)  { tzSel.disabled = false; tzSel.style.opacity = ''; tzSel.style.cursor = ''; }
+    if (tzNote) tzNote.style.display = 'none';
+    // Revert to browser timezone on logout
+    applyUserTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }
 }
 
@@ -2142,6 +2156,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     localStorage.setItem('bt-user', JSON.stringify(data.user));
     userSession = data.user;
     updateAuthUI();
+    applyUserTimezone(data.user.timezone);
     closeLoginModal();
     showToast(`Welcome back, ${data.user.name.split(' ')[0]}!`);
   } catch (err) {

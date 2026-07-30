@@ -477,6 +477,12 @@ router.get('/admin/settings', requireAdmin, ah(async (_req, res) => {
     ldap_name_attr:      s.ldap_name_attr    || 'cn',
     ldap_email_attr:     s.ldap_email_attr   || 'mail',
     ldap_phone_attr:     s.ldap_phone_attr   || 'telephoneNumber',
+    purge_enabled:        s.purge_enabled        === 'true',
+    purge_retention_value:parseInt(s.purge_retention_value) || 12,
+    purge_retention_unit: s.purge_retention_unit  || 'months',
+    purge_schedule_value: parseInt(s.purge_schedule_value)  || 1,
+    purge_schedule_unit:  s.purge_schedule_unit   || 'months',
+    purge_last_run:       s.purge_last_run         || null,
   });
 }));
 
@@ -505,6 +511,15 @@ router.put('/settings', requireAdmin, ah(async (req, res) => {
   if (ldap_name_attr   !== undefined) await upsert('ldap_name_attr',   ldap_name_attr);
   if (ldap_email_attr  !== undefined) await upsert('ldap_email_attr',  ldap_email_attr);
   if (ldap_phone_attr  !== undefined) await upsert('ldap_phone_attr',  ldap_phone_attr);
+
+  // Purge settings
+  const { purge_enabled, purge_retention_value, purge_retention_unit,
+          purge_schedule_value, purge_schedule_unit } = req.body || {};
+  if (purge_enabled         !== undefined) await upsert('purge_enabled',         purge_enabled ? 'true' : 'false');
+  if (purge_retention_value !== undefined) await upsert('purge_retention_value', String(parseInt(purge_retention_value) || 12));
+  if (purge_retention_unit  !== undefined) await upsert('purge_retention_unit',  purge_retention_unit);
+  if (purge_schedule_value  !== undefined) await upsert('purge_schedule_value',  String(parseInt(purge_schedule_value)  || 1));
+  if (purge_schedule_unit   !== undefined) await upsert('purge_schedule_unit',   purge_schedule_unit);
 
   res.json({ ok: true });
 }));
@@ -941,6 +956,54 @@ router.post('/auth/ldap-test', requireAdmin, ah(async (req, res) => {
   }
 }));
 
+// ═══════════════════════════════════════════════════════════
+// Data purge
+// ═══════════════════════════════════════════════════════════
+
+/** Convert a value+unit pair to milliseconds. */
+function toMs(value, unit) {
+  const v = parseInt(value) || 1;
+  switch (unit) {
+    case 'days':   return v * 24 * 60 * 60 * 1000;
+    case 'weeks':  return v *  7 * 24 * 60 * 60 * 1000;
+    case 'months': return v * 30 * 24 * 60 * 60 * 1000;
+    default:       return v * 30 * 24 * 60 * 60 * 1000;
+  }
+}
+
+/** Run the purge — deletes appointments older than the configured retention period. */
+async function runPurge() {
+  const [rows] = await db.execute("SELECT `key`, `value` FROM settings WHERE `key` LIKE 'purge_%'");
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+
+  if (s.purge_enabled !== 'true') return { skipped: true };
+
+  const retentionMs = toMs(s.purge_retention_value, s.purge_retention_unit);
+  const cutoff = new Date(Date.now() - retentionMs);
+  const cutoffStr = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+
+  const [result] = await db.execute(
+    "DELETE FROM appointments WHERE end_time < ?", [cutoffStr]
+  );
+
+  const now = new Date().toISOString();
+  await db.execute(
+    "INSERT INTO settings (`key`, `value`) VALUES ('purge_last_run', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
+    [now]
+  );
+
+  console.log(`[Purge] Deleted ${result.affectedRows} appointment(s) older than ${s.purge_retention_value} ${s.purge_retention_unit} (cutoff: ${cutoffStr})`);
+  return { deleted: result.affectedRows, cutoff: cutoffStr, ranAt: now };
+}
+
+/** Manual purge trigger (admin only). */
+router.post('/admin/purge', requireAdmin, ah(async (_req, res) => {
+  const result = await runPurge();
+  if (result.skipped) return res.status(400).json({ error: 'Purge is disabled. Enable it in Settings first.' });
+  res.json(result);
+}));
+
 // LDAP log (admin only)
 router.get('/admin/ldap-log', requireAdmin, ah(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 100, 500);
@@ -973,3 +1036,4 @@ router.get('/stats/top-users', ah(async (_req, res) => {
 }));
 
 module.exports = router;
+module.exports.runPurge = runPurge;

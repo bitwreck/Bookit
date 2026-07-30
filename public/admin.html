@@ -711,6 +711,57 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
           </div>
         </div>
 
+        <!-- Data Purge -->
+        <div class="card" style="max-width:560px">
+          <div class="card-head"><span class="card-title">Automatic Data Purge</span></div>
+          <div class="card-body">
+            <div class="toggle-row" style="margin-bottom:1.25rem">
+              <div>
+                <div class="toggle-label">Enable automatic purge</div>
+                <div class="toggle-sub">Automatically delete old appointments on a recurring schedule. Only appointments are deleted — users and activity logs are kept.</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="purgeEnabled" /><span class="slider"></span></label>
+            </div>
+
+            <div id="purgeFields">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+                <div class="form-group" style="margin:0">
+                  <label>Delete appointments older than</label>
+                  <div style="display:flex;gap:.5rem">
+                    <input class="form-control" type="number" id="purgeRetentionValue" min="1" style="width:80px" />
+                    <select class="form-control" id="purgeRetentionUnit">
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group" style="margin:0">
+                  <label>Run purge every</label>
+                  <div style="display:flex;gap:.5rem">
+                    <input class="form-control" type="number" id="purgeScheduleValue" min="1" style="width:80px" />
+                    <select class="form-control" id="purgeScheduleUnit">
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem">
+                Last run: <span id="purgeLastRun">Never</span>
+              </div>
+
+              <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+                <button class="btn btn-primary" id="purgeSaveBtn" type="button">Save Purge Settings</button>
+                <button class="btn btn-outline" id="purgeRunNowBtn" type="button" style="color:var(--danger);border-color:var(--danger)">Run Now</button>
+              </div>
+              <div id="purgeResult" style="margin-top:.65rem;font-size:.83rem;display:none"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Password -->
         <div class="card" style="max-width:560px">
           <div class="card-head"><span class="card-title">Change Password</span></div>
@@ -1374,6 +1425,15 @@ async function loadSettings() {
     document.getElementById('ldapNameAttr').value    = s.ldap_name_attr   || 'cn';
     document.getElementById('ldapEmailAttr').value   = s.ldap_email_attr  || 'mail';
     document.getElementById('ldapPhoneAttr').value   = s.ldap_phone_attr  || 'telephoneNumber';
+
+    // Purge fields
+    document.getElementById('purgeEnabled').checked          = s.purge_enabled === true;
+    document.getElementById('purgeRetentionValue').value     = s.purge_retention_value || 12;
+    document.getElementById('purgeRetentionUnit').value      = s.purge_retention_unit  || 'months';
+    document.getElementById('purgeScheduleValue').value      = s.purge_schedule_value  || 1;
+    document.getElementById('purgeScheduleUnit').value       = s.purge_schedule_unit   || 'months';
+    document.getElementById('purgeLastRun').textContent      = s.purge_last_run
+      ? new Date(s.purge_last_run).toLocaleString() : 'Never';
   } catch (err) {
     toast('Could not load settings', 'error');
   }
@@ -1475,6 +1535,49 @@ document.getElementById('ldapTestBtn').addEventListener('click', async () => {
     result.textContent   = '✗ ' + (err.message || 'Connection failed');
   } finally {
     btn.disabled = false; btn.textContent = 'Test Connection';
+  }
+});
+
+// Purge settings
+document.getElementById('purgeSaveBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('purgeSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await api('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        purge_enabled:         document.getElementById('purgeEnabled').checked,
+        purge_retention_value: document.getElementById('purgeRetentionValue').value,
+        purge_retention_unit:  document.getElementById('purgeRetentionUnit').value,
+        purge_schedule_value:  document.getElementById('purgeScheduleValue').value,
+        purge_schedule_unit:   document.getElementById('purgeScheduleUnit').value,
+      }),
+    });
+    toast('Purge settings saved', 'success');
+  } catch (err) {
+    toast(err.message || 'Could not save purge settings', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Purge Settings';
+  }
+});
+
+document.getElementById('purgeRunNowBtn').addEventListener('click', async () => {
+  if (!confirm('Run purge now? This will permanently delete appointments older than the configured retention period.')) return;
+  const btn    = document.getElementById('purgeRunNowBtn');
+  const result = document.getElementById('purgeResult');
+  btn.disabled = true; btn.textContent = 'Running…';
+  result.style.display = 'none';
+  try {
+    const data = await api('/admin/purge', { method: 'POST' });
+    result.style.cssText = 'display:block;color:#16a34a';
+    result.textContent   = `✓ Deleted ${data.deleted} appointment(s) older than ${data.cutoff}`;
+    document.getElementById('purgeLastRun').textContent = new Date(data.ranAt).toLocaleString();
+  } catch (err) {
+    result.style.cssText = 'display:block;color:#dc2626';
+    result.textContent   = '✗ ' + (err.message || 'Purge failed');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Run Now';
+    result.style.display = 'block';
   }
 });
 

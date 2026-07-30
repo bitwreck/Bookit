@@ -107,7 +107,13 @@ INSERT IGNORE INTO settings (`key`, `value`) VALUES
   ('ldap_user_filter',    '(mail={{username}})'),
   ('ldap_name_attr',      'cn'),
   ('ldap_email_attr',     'mail'),
-  ('ldap_phone_attr',     'telephoneNumber');
+  ('ldap_phone_attr',     'telephoneNumber'),
+  ('purge_enabled',       'false'),
+  ('purge_retention_value','12'),
+  ('purge_retention_unit','months'),
+  ('purge_schedule_value','1'),
+  ('purge_schedule_unit', 'months'),
+  ('purge_last_run',      '');
 
 -- ── Admin users ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS admins (

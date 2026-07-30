@@ -58,4 +58,43 @@ app.listen(PORT, () => {
   console.log(`\n  Booking Tool running at http://localhost:${PORT}`);
   console.log(`  Admin panel:           http://localhost:${PORT}/admin.html`);
   console.log(`  Default login:         admin / Admin1234!\n`);
+  startPurgeScheduler();
 });
+
+// ── Background purge scheduler ────────────────────────────
+const db = require('./database');
+
+function toMs(value, unit) {
+  const v = parseInt(value) || 1;
+  switch (unit) {
+    case 'days':   return v * 24 * 60 * 60 * 1000;
+    case 'weeks':  return v *  7 * 24 * 60 * 60 * 1000;
+    case 'months': return v * 30 * 24 * 60 * 60 * 1000;
+    default:       return v * 30 * 24 * 60 * 60 * 1000;
+  }
+}
+
+async function startPurgeScheduler() {
+  // Check every hour whether a scheduled purge is due
+  setInterval(async () => {
+    try {
+      const [rows] = await db.execute("SELECT `key`, `value` FROM settings WHERE `key` LIKE 'purge_%'");
+      const s = {};
+      rows.forEach(r => { s[r.key] = r.value; });
+
+      if (s.purge_enabled !== 'true') return;
+
+      const scheduleMs = toMs(s.purge_schedule_value, s.purge_schedule_unit);
+      const lastRun    = s.purge_last_run ? new Date(s.purge_last_run).getTime() : 0;
+
+      if (Date.now() - lastRun < scheduleMs) return;  // not due yet
+
+      const { runPurge } = require('./routes/api');
+      await runPurge();
+    } catch (err) {
+      console.error('[Purge] Scheduler error:', err.message);
+    }
+  }, 60 * 60 * 1000); // check every hour
+
+  console.log('  Purge scheduler started (checks every hour)\n');
+}

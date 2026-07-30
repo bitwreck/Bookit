@@ -132,6 +132,13 @@ router.put('/admin/password', requireAdmin, ah(async (req, res) => {
 // LDAP helpers
 // ═══════════════════════════════════════════════════════════
 
+/** Escape special characters in an LDAP filter value (RFC 4515). */
+function escapeLdapFilter(str) {
+  return String(str).replace(/[*()\\\/\0]/g, c =>
+    '\\' + c.charCodeAt(0).toString(16).padStart(2, '0')
+  );
+}
+
 /** Write an LDAP event to the ldap_log table (fire-and-forget). */
 function logLdapEvent(event, email, detail, ip = null) {
   db.execute(
@@ -183,7 +190,10 @@ async function ldapAuthenticate(email, password, ip = null) {
     timeout:        8000,
     connectTimeout: 8000,
     reconnect:      false,           // don't retry — fail fast
-    tlsOptions:     { rejectUnauthorized: false },  // allows self-signed certs for ldaps://
+    tlsOptions: {
+      rejectUnauthorized: false,  // allow self-signed certs
+      minVersion: 'TLSv1',        // permit older TLS versions some LDAP servers require
+    },
   });
 
   // Attach a persistent error handler to prevent Node from crashing on
@@ -211,7 +221,7 @@ async function ldapAuthenticate(email, password, ip = null) {
     }
 
     // Build search filter — replace {{username}} with the escaped email
-    const escapedEmail = ldap.escapeFilter(email);
+    const escapedEmail = escapeLdapFilter(email);
     const filter = (cfg.ldap_user_filter || '(mail={{username}})')
       .replace(/\{\{username\}\}/g, escapedEmail);
 
@@ -885,7 +895,7 @@ router.post('/auth/ldap-test', requireAdmin, ah(async (req, res) => {
     return res.status(400).json({ error: 'url, bind_dn, and base_dn are required' });
 
   const ip = getClientIP(req);
-  const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 8000, reconnect: false, tlsOptions: { rejectUnauthorized: false } });
+  const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 8000, reconnect: false, tlsOptions: { rejectUnauthorized: false, minVersion: 'TLSv1' } });
   client.on('error', err => console.error('[LDAP] Test client error:', err.message));
   try {
     await new Promise((resolve, reject) => {

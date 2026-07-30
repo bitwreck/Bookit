@@ -182,14 +182,20 @@ async function ldapAuthenticate(email, password, ip = null) {
     url:            cfg.ldap_url,
     timeout:        8000,
     connectTimeout: 8000,
+    reconnect:      false,           // don't retry — fail fast
     tlsOptions:     { rejectUnauthorized: false },  // allows self-signed certs for ldaps://
+  });
+
+  // Attach a persistent error handler to prevent Node from crashing on
+  // unhandled 'error' events emitted during ldapjs's reconnect backoff cycle
+  client.on('error', err => {
+    console.error('[LDAP] Client error:', err.message);
   });
 
   // Surface connection errors immediately
   await new Promise((resolve, reject) => {
     client.once('connect', resolve);
     client.once('error',   reject);
-    // If already connected (synchronous connect), bind will tell us
     setTimeout(resolve, 100);
   }).catch(() => {});
 
@@ -879,7 +885,8 @@ router.post('/auth/ldap-test', requireAdmin, ah(async (req, res) => {
     return res.status(400).json({ error: 'url, bind_dn, and base_dn are required' });
 
   const ip = getClientIP(req);
-  const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 8000, tlsOptions: { rejectUnauthorized: false } });
+  const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 8000, reconnect: false, tlsOptions: { rejectUnauthorized: false } });
+  client.on('error', err => console.error('[LDAP] Test client error:', err.message));
   try {
     await new Promise((resolve, reject) => {
       client.bind(bind_dn, bind_pass || '', err => (err ? reject(err) : resolve()));

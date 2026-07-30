@@ -4,6 +4,9 @@
 .env.*.local
 # .env.docker is intentionally tracked (contains only placeholders)
 
+# TLS certificates — never commit private keys
+certs/
+
 # Dependencies
 node_modules/
 

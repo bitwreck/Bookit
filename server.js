@@ -4,11 +4,20 @@ require('dotenv').config();
 const express     = require('express');
 const cors        = require('cors');
 const path        = require('path');
+const fs          = require('fs');
+const http        = require('http');
+const https       = require('https');
 const rateLimit   = require('express-rate-limit');
 const apiRouter   = require('./routes/api');
 
-const app  = express();
-const PORT = process.env.PORT || 3000;
+const app       = express();
+const PORT      = process.env.PORT      || 3000;
+const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
+
+// ── TLS cert paths (set SSL_CERT / SSL_KEY in .env to enable HTTPS) ──
+const SSL_CERT = process.env.SSL_CERT || path.join(__dirname, 'certs', 'cert.pem');
+const SSL_KEY  = process.env.SSL_KEY  || path.join(__dirname, 'certs', 'key.pem');
+const tlsAvailable = fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY);
 
 // ── Middleware ─────────────────────────────────────────────
 app.use(cors());
@@ -54,12 +63,38 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── Start ──────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n  Booking Tool running at http://localhost:${PORT}`);
-  console.log(`  Admin panel:           http://localhost:${PORT}/admin.html`);
-  console.log(`  Default login:         admin / Admin1234!\n`);
-  startPurgeScheduler();
-});
+if (tlsAvailable) {
+  const tlsOpts = {
+    cert: fs.readFileSync(SSL_CERT),
+    key:  fs.readFileSync(SSL_KEY),
+  };
+
+  // HTTPS server
+  https.createServer(tlsOpts, app).listen(HTTPS_PORT, () => {
+    console.log(`\n  Booking Tool running at https://localhost:${HTTPS_PORT}`);
+    console.log(`  Admin panel:           https://localhost:${HTTPS_PORT}/admin.html`);
+    console.log(`  Default login:         admin / Admin1234!\n`);
+    startPurgeScheduler();
+  });
+
+  // HTTP → HTTPS redirect
+  http.createServer((req, res) => {
+    const host = (req.headers.host || '').replace(/:\d+$/, '');
+    res.writeHead(301, { Location: `https://${host}:${HTTPS_PORT}${req.url}` });
+    res.end();
+  }).listen(PORT, () => {
+    console.log(`  HTTP on :${PORT} → redirecting to HTTPS :${HTTPS_PORT}`);
+  });
+} else {
+  // No certs — plain HTTP
+  http.createServer(app).listen(PORT, () => {
+    console.log(`\n  Booking Tool running at http://localhost:${PORT}`);
+    console.log(`  Admin panel:           http://localhost:${PORT}/admin.html`);
+    console.log(`  Default login:         admin / Admin1234!\n`);
+    console.log(`  Tip: place cert.pem + key.pem in ./certs/ to enable HTTPS.\n`);
+    startPurgeScheduler();
+  });
+}
 
 // ── Background purge scheduler ────────────────────────────
 const db = require('./database');

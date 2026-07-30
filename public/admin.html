@@ -136,6 +136,10 @@ tr:hover td{background:var(--surface2)}
 .btn-ghost:hover{background:var(--surface2);color:var(--text)}
 .btn-outline{background:transparent;color:var(--text);border-color:var(--border)}
 .btn-outline:hover{background:var(--surface2)}
+.pager-btn{display:inline-flex;align-items:center;justify-content:center;min-width:2rem;height:2rem;padding:0 .5rem;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);transition:background .15s}
+.pager-btn:hover:not(:disabled){background:var(--surface2)}
+.pager-btn.active{background:var(--text);color:var(--surface);border-color:var(--text)}
+.pager-btn:disabled{opacity:.4;cursor:not-allowed}
 .btn-danger{background:var(--danger);color:#fff;border-color:var(--danger)}
 .btn-danger:hover{opacity:.9}
 .btn-sm{padding:.3rem .75rem;font-size:.8rem}
@@ -693,7 +697,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
         <div class="card" id="ldapLogCard" style="display:none;margin-top:1.5rem">
           <div class="card-head" style="display:flex;align-items:center;justify-content:space-between">
             <span class="card-title">LDAP Authentication Log</span>
-            <button class="btn btn-outline" style="font-size:.78rem;padding:.3rem .75rem" onclick="loadLdapLog()">Refresh</button>
+            <button class="btn btn-outline" style="font-size:.78rem;padding:.3rem .75rem" onclick="ldapLogPage=1;loadLdapLog()">Refresh</button>
           </div>
           <div class="card-body" style="padding:0">
             <div id="ldapLogWrap" style="overflow-x:auto">
@@ -708,6 +712,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
                 <tbody id="ldapLogBody"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">No events yet</td></tr></tbody>
               </table>
             </div>
+            <div id="ldapLogPager" style="display:flex;gap:.4rem;justify-content:center;padding:.75rem 0 .25rem"></div>
           </div>
         </div>
 
@@ -1447,25 +1452,34 @@ document.getElementById('settingLdapEnabled').addEventListener('change', e => {
 });
 
 // Load LDAP log
-async function loadLdapLog() {
+let ldapLogPage = 1;
+
+async function loadLdapLog(page) {
+  ldapLogPage = page || ldapLogPage;
   const tbody = document.getElementById('ldapLogBody');
+  const pager = document.getElementById('ldapLogPager');
   try {
-    const rows = await api('/admin/ldap-log?limit=10');
-    if (!rows.length) {
+    const res = await api(`/admin/ldap-log?limit=10&page=${ldapLogPage}`);
+    const { total, pages, data } = res;
+
+    if (!data.length && ldapLogPage === 1) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">No events yet</td></tr>';
+      pager.innerHTML = '';
       return;
     }
+
     const eventStyles = {
-      success:       'background:#dcfce7;color:#15803d',
-      bind_failed:   'background:#fee2e2;color:#b91c1c',
-      search_failed: 'background:#fee2e2;color:#b91c1c',
-      user_not_found:'background:#fef9c3;color:#854d0e',
-      auth_failed:   'background:#fee2e2;color:#b91c1c',
-      error:         'background:#fee2e2;color:#b91c1c',
+      success:        'background:#dcfce7;color:#15803d',
+      bind_failed:    'background:#fee2e2;color:#b91c1c',
+      search_failed:  'background:#fee2e2;color:#b91c1c',
+      user_not_found: 'background:#fef9c3;color:#854d0e',
+      auth_failed:    'background:#fee2e2;color:#b91c1c',
+      error:          'background:#fee2e2;color:#b91c1c',
     };
-    tbody.innerHTML = rows.map(r => {
+
+    tbody.innerHTML = data.map(r => {
       const style = eventStyles[r.event] || '';
-      const badge = `<span style="font-size:.72rem;font-weight:600;padding:.2rem .5rem;border-radius:4px;${style}">${r.event.replace('_',' ').toUpperCase()}</span>`;
+      const badge = `<span style="font-size:.72rem;font-weight:600;padding:.2rem .5rem;border-radius:4px;${style}">${r.event.replace(/_/g,' ').toUpperCase()}</span>`;
       const time  = new Date(r.created_at).toLocaleString();
       return `<tr>
         <td style="white-space:nowrap;font-size:.82rem">${time}</td>
@@ -1475,6 +1489,16 @@ async function loadLdapLog() {
         <td style="font-family:monospace;font-size:.78rem">${r.ip_address || '—'}</td>
       </tr>`;
     }).join('');
+
+    // Pagination controls
+    if (pages <= 1) { pager.innerHTML = ''; return; }
+    const btns = [];
+    btns.push(`<button class="pager-btn" onclick="loadLdapLog(${ldapLogPage - 1})" ${ldapLogPage <= 1 ? 'disabled' : ''}>‹</button>`);
+    for (let i = 1; i <= pages; i++) {
+      btns.push(`<button class="pager-btn${i === ldapLogPage ? ' active' : ''}" onclick="loadLdapLog(${i})">${i}</button>`);
+    }
+    btns.push(`<button class="pager-btn" onclick="loadLdapLog(${ldapLogPage + 1})" ${ldapLogPage >= pages ? 'disabled' : ''}>›</button>`);
+    pager.innerHTML = btns.join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);padding:1rem">Failed to load log: ${err.message}</td></tr>`;
   }

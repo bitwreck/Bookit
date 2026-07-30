@@ -718,22 +718,7 @@ router.get('/appointments', ah(async (req, res) => {
   })));
 }));
 
-router.get('/appointments/:id', ah(async (req, res) => {
-  const [rows] = await db.execute(
-    `SELECT a.*, r.name AS resource_name, r.color AS resource_color
-     FROM appointments a JOIN resources r ON r.id = a.resource_id
-     WHERE a.id = ?`, [req.params.id]
-  );
-  if (!rows[0]) return res.status(404).json({ error: 'Not found' });
-  const r = rows[0];
-  res.json({
-    ...r,
-    start_time: toISOLocal(r.start_time),
-    end_time:   toISOLocal(r.end_time),
-  });
-}));
-
-// Real-time conflict check — called while the user is filling out the booking form.
+// Real-time conflict check — must be registered BEFORE /:id to avoid route collision.
 // GET /api/appointments/check-conflict?resource_id=1&start=...&end=...&exclude_id=5
 router.get('/appointments/check-conflict', ah(async (req, res) => {
   const { resource_id, start, end, exclude_id } = req.query;
@@ -761,6 +746,21 @@ router.get('/appointments/check-conflict', ah(async (req, res) => {
       start_time: toISOLocal(r.start_time),
       end_time:   toISOLocal(r.end_time),
     })),
+  });
+}));
+
+router.get('/appointments/:id', ah(async (req, res) => {
+  const [rows] = await db.execute(
+    `SELECT a.*, r.name AS resource_name, r.color AS resource_color
+     FROM appointments a JOIN resources r ON r.id = a.resource_id
+     WHERE a.id = ?`, [req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+  const r = rows[0];
+  res.json({
+    ...r,
+    start_time: toISOLocal(r.start_time),
+    end_time:   toISOLocal(r.end_time),
   });
 }));
 

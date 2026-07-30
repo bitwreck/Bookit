@@ -983,8 +983,12 @@ async function runPurge() {
   const cutoff = new Date(Date.now() - retentionMs);
   const cutoffStr = cutoff.toISOString().slice(0, 19).replace('T', ' ');
 
-  const [result] = await db.execute(
+  const [apptResult] = await db.execute(
     "DELETE FROM appointments WHERE end_time < ?", [cutoffStr]
+  );
+
+  const [logResult] = await db.execute(
+    "DELETE FROM activity_log WHERE created_at < ?", [cutoffStr]
   );
 
   const now = new Date().toISOString();
@@ -993,8 +997,8 @@ async function runPurge() {
     [now]
   );
 
-  console.log(`[Purge] Deleted ${result.affectedRows} appointment(s) older than ${s.purge_retention_value} ${s.purge_retention_unit} (cutoff: ${cutoffStr})`);
-  return { deleted: result.affectedRows, cutoff: cutoffStr, ranAt: now };
+  console.log(`[Purge] Deleted ${apptResult.affectedRows} appointment(s) and ${logResult.affectedRows} activity log entry/entries older than ${s.purge_retention_value} ${s.purge_retention_unit} (cutoff: ${cutoffStr})`);
+  return { deleted: apptResult.affectedRows, logsDeleted: logResult.affectedRows, cutoff: cutoffStr, ranAt: now };
 }
 
 /** Manual purge trigger (admin only). */

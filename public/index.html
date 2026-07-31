@@ -833,7 +833,6 @@ select.form-control {
           </svg>
           Download .ics
         </a>
-        <button class="btn btn-outline" id="anotherBookBtn">Book Another</button>
       </div>
     </div>
 
@@ -1666,9 +1665,6 @@ function closeBookingModal() {
 document.getElementById('openBookBtn').addEventListener('click', () => openBookingModal());
 document.getElementById('closeBookBtn').addEventListener('click', closeBookingModal);
 document.getElementById('cancelBookBtn').addEventListener('click', closeBookingModal);
-document.getElementById('anotherBookBtn').addEventListener('click', () => {
-  resetBookingForm();
-});
 
 function resetBookingForm() {
   document.getElementById('bookingForm').reset();

@@ -147,6 +147,6 @@ INSERT IGNORE INTO categories (id, name) VALUES
 
 -- ── Seed: sample resources ─────────────────────────────────
 INSERT IGNORE INTO resources (id, category_id, name, description, color) VALUES
-  (1, 1, 'Nexus Dashboard',  'RTP Lab rack 9',    '#0ea5e9'),
-  (2, 1, 'UCSX Blade 1/1',   'Rack 1 Chassis 1',  '#f59e0b'),
-  (3, 1, 'IMM Lab',          'RTP IMM rack 5',     '#10b981');
+  (1, 1, 'Resource 1', 'Building 1', '#0ea5e9'),
+  (2, 1, 'Resource 2', 'Building 2', '#f59e0b'),
+  (3, 1, 'Resource 3', 'Building 3', '#10b981');

@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 INSERT IGNORE INTO settings (`key`, `value`) VALUES
   ('require_cancel_code', 'true'),
+  ('https_redirect',      'true'),
   ('ldap_enabled',        'false'),
   ('ldap_url',            ''),
   ('ldap_base_dn',        ''),

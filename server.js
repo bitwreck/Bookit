@@ -9,6 +9,7 @@ const http        = require('http');
 const https       = require('https');
 const rateLimit   = require('express-rate-limit');
 const apiRouter   = require('./routes/api');
+const db          = require('./database');
 
 const app       = express();
 const PORT      = process.env.PORT      || 3000;
@@ -77,13 +78,20 @@ if (tlsAvailable) {
     startPurgeScheduler();
   });
 
-  // HTTP → HTTPS redirect
-  http.createServer((req, res) => {
-    const host = (req.headers.host || '').replace(/:\d+$/, '');
-    res.writeHead(301, { Location: `https://${host}:${HTTPS_PORT}${req.url}` });
-    res.end();
+  // HTTP server — redirects to HTTPS when the setting is enabled, otherwise serves the app
+  http.createServer(async (req, res) => {
+    try {
+      const [[row]] = await db.execute("SELECT `value` FROM settings WHERE `key` = 'https_redirect'");
+      const shouldRedirect = !row || row.value !== 'false';
+      if (shouldRedirect) {
+        const host = (req.headers.host || '').replace(/:\d+$/, '');
+        res.writeHead(301, { Location: `https://${host}:${HTTPS_PORT}${req.url}` });
+        return res.end();
+      }
+    } catch (_) { /* DB not ready yet — fall through to app */ }
+    app(req, res);
   }).listen(PORT, () => {
-    console.log(`  HTTP on :${PORT} → redirecting to HTTPS :${HTTPS_PORT}`);
+    console.log(`  HTTP on :${PORT} (redirect to HTTPS controlled via Admin → Settings)`);
   });
 } else {
   // No certs — plain HTTP
@@ -97,8 +105,6 @@ if (tlsAvailable) {
 }
 
 // ── Background purge scheduler ────────────────────────────
-const db = require('./database');
-
 function toMs(value, unit) {
   const v = parseInt(value) || 1;
   switch (unit) {

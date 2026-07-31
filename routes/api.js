@@ -482,6 +482,7 @@ router.get('/admin/settings', requireAdmin, ah(async (_req, res) => {
   rows.forEach(r => { s[r.key] = r.value; });
   res.json({
     require_cancel_code: s.require_cancel_code === 'true',
+    https_redirect:      s.https_redirect !== 'false',   // default true
     ldap_enabled:        s.ldap_enabled === 'true',
     ldap_url:            s.ldap_url          || '',
     ldap_base_dn:        s.ldap_base_dn      || '',
@@ -514,6 +515,10 @@ router.put('/settings', requireAdmin, ah(async (req, res) => {
 
   if (require_cancel_code !== undefined)
     await upsert('require_cancel_code', require_cancel_code ? 'true' : 'false');
+
+  const { https_redirect } = req.body || {};
+  if (https_redirect !== undefined)
+    await upsert('https_redirect', https_redirect ? 'true' : 'false');
 
   if (ldap_enabled !== undefined) await upsert('ldap_enabled', ldap_enabled ? 'true' : 'false');
   if (ldap_url       !== undefined) await upsert('ldap_url',       ldap_url);

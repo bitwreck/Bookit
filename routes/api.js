@@ -660,7 +660,7 @@ router.get('/resources', ah(async (_req, res) => {
      FROM resources r
      JOIN categories c ON c.id = r.category_id
      LEFT JOIN appointments a
-            ON a.resource_id = r.id AND a.status != 'cancelled'
+            ON a.resource_id = r.id AND a.status != 'cancelled' AND a.user_id IS NOT NULL
      GROUP BY r.id, r.name, r.description, r.color, r.category_id, c.name, r.created_at, r.updated_at
      ORDER BY c.name ASC, r.name ASC`
   );
@@ -1024,8 +1024,16 @@ router.delete('/users/:id', requireAdmin, ah(async (req, res) => {
   const [[user]] = await db.execute('SELECT id, name, email FROM users WHERE id = ?', [id]);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  // Cancel any future appointments belonging to this user before deleting
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const [cancelled] = await db.execute(
+    `UPDATE appointments SET status = 'cancelled'
+     WHERE user_id = ? AND status != 'cancelled' AND start_time > ?`,
+    [id, now]
+  );
+
   await db.execute('DELETE FROM users WHERE id = ?', [id]);
-  res.json({ ok: true, message: `User ${user.email} deleted` });
+  res.json({ ok: true, message: `User ${user.email} deleted`, cancelledBookings: cancelled.affectedRows });
 }));
 
 // ── ICS download ───────────────────────────────────────────

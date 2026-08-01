@@ -936,7 +936,7 @@ router.get('/appointments/mine', ah(async (req, res) => {
      JOIN resources r ON r.id = a.resource_id
      WHERE a.user_id = ? AND a.status != 'cancelled'
      ORDER BY a.start_time ASC`,
-    [payload.id]
+    [payload.userId]
   );
 
   const mapMine = r => ({

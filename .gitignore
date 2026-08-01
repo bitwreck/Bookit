@@ -5,7 +5,9 @@
 # .env.docker is intentionally tracked (contains only placeholders)
 
 # TLS certificates — never commit private keys
-certs/
+certs/*.pem
+certs/*.crt
+certs/*.key
 
 # Dependencies
 node_modules/

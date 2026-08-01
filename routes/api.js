@@ -1,10 +1,11 @@
 'use strict';
-const express    = require('express');
-const bcrypt     = require('bcryptjs');
-const jwt        = require('jsonwebtoken');
-const ldap       = require('ldapjs');
-const db         = require('../database');
-const requireAdmin = require('../middleware/auth');
+const express        = require('express');
+const bcrypt         = require('bcryptjs');
+const jwt            = require('jsonwebtoken');
+const ldap           = require('ldapjs');
+const db             = require('../database');
+const requireAdmin   = require('../middleware/auth');
+const notifications  = require('../services/notifications');
 
 const router = express.Router();
 
@@ -87,6 +88,13 @@ function buildICS(appt) {
   ];
   return lines.join('\r\n');
 }
+
+// ═══════════════════════════════════════════════════════════
+// Public feature flags (no auth required)
+// ═══════════════════════════════════════════════════════════
+router.get('/features', (_req, res) => {
+  res.json({ smtp_enabled: !!process.env.SMTP_HOST });
+});
 
 // ═══════════════════════════════════════════════════════════
 // Admin Auth
@@ -474,6 +482,42 @@ router.put('/auth/profile', ah(async (req, res) => {
   );
 
   res.json({ token, user: { ...user, authSource: user.auth_source } });
+}));
+
+router.put('/auth/password', ah(async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.type !== 'user') throw new Error('wrong type');
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired session' });
+  }
+
+  const { current_password, new_password } = req.body || {};
+  if (!current_password)
+    return res.status(400).json({ error: 'Current password is required' });
+  if (!new_password || new_password.length < 8)
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+
+  const [[user]] = await db.execute(
+    'SELECT id, auth_source, password_hash FROM users WHERE id = ?', [payload.userId]
+  );
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.auth_source === 'ldap')
+    return res.status(403).json({ error: 'Password changes are managed by your organisation\'s directory' });
+  if (!user.password_hash)
+    return res.status(400).json({ error: 'No password set on this account. Contact an administrator.' });
+
+  const match = await bcrypt.compare(current_password, user.password_hash);
+  if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+
+  const newHash = await bcrypt.hash(new_password, 10);
+  await db.execute('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, user.id]);
+  res.json({ ok: true });
 }));
 
 router.get('/auth/me', ah(async (req, res) => {
@@ -879,10 +923,15 @@ router.post('/appointments', ah(async (req, res) => {
   }
   if (userPayload.type !== 'user') return res.status(403).json({ error: 'Forbidden' });
 
-  const { resource_id, title, description, booked_by_name,
-          booked_by_email, booked_by_phone, start_time, end_time, timezone } = req.body || {};
+  // Identity always comes from the verified JWT — never trust the body for these
+  const booked_by_name  = userPayload.name;
+  const booked_by_email = userPayload.email;
+  const booked_by_phone = userPayload.phone || null;
 
-  if (!resource_id || !title || !booked_by_name || !booked_by_email || !start_time || !end_time)
+  const { resource_id, title, description, start_time, end_time, timezone,
+          send_confirmation_email } = req.body || {};
+
+  if (!resource_id || !title || !start_time || !end_time)
     return res.status(400).json({ error: 'Missing required fields' });
 
   // Validate resource exists
@@ -899,22 +948,8 @@ router.post('/appointments', ah(async (req, res) => {
   if (conflicts.length > 0)
     return res.status(409).json({ error: 'Time slot conflicts with an existing booking' });
 
-  // Upsert user record (name + phone may update on repeat bookings)
-  let userId = null;
-  try {
-    await db.execute(
-      `INSERT INTO users (name, email, phone)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         name  = VALUES(name),
-         phone = COALESCE(VALUES(phone), phone)`,
-      [booked_by_name, booked_by_email, booked_by_phone || null]
-    );
-    const [[user]] = await db.execute('SELECT id FROM users WHERE email = ?', [booked_by_email]);
-    userId = user ? user.id : null;
-  } catch (e) {
-    console.error('user upsert failed:', e.message);
-  }
+  // User is authenticated — ID comes directly from the verified JWT
+  const userId = userPayload.userId;
 
   const [result] = await db.execute(
     `INSERT INTO appointments
@@ -933,6 +968,17 @@ router.post('/appointments', ah(async (req, res) => {
   );
   const appt = rows[0];
   await logActivity('created', appt, booked_by_email, getClientIP(req));
+
+  // Send confirmation email if user opted in (fire-and-forget — never blocks the response)
+  if (send_confirmation_email && process.env.SMTP_HOST) {
+    notifications.sendBookingConfirmation({
+      ...appt,
+      start_time: toISOLocal(appt.start_time),
+      end_time:   toISOLocal(appt.end_time),
+      timezone:   timezone || 'UTC',
+    }).catch(err => console.error('[notifications] booking confirmation failed:', err.message));
+  }
+
   res.status(201).json({
     ...appt,
     start_time: toISOLocal(appt.start_time),

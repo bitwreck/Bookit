@@ -944,24 +944,25 @@ select.form-control {
           <select class="form-control" id="bTimezone"></select>
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="bName">Your Name *</label>
-            <input class="form-control" type="text" id="bName" placeholder="Jane Smith" required />
-            <span class="form-error" id="errName">Required.</span>
+        <!-- Hidden when logged in — identity comes from JWT on the backend -->
+        <div id="bookingGuestSection" style="display:none">
+          <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bName">Your Name *</label>
+              <input class="form-control" type="text" id="bName" placeholder="Jane Smith" />
+              <span class="form-error" id="errName">Required.</span>
+            </div>
+            <div class="form-group">
+              <label for="bEmail">Email *</label>
+              <input class="form-control" type="email" id="bEmail" placeholder="jane@example.com" />
+              <span class="form-error" id="errEmail">Valid email required.</span>
+            </div>
           </div>
           <div class="form-group">
-            <label for="bEmail">Email *</label>
-            <input class="form-control" type="email" id="bEmail" placeholder="jane@example.com" required />
-            <span class="form-error" id="errEmail">Valid email required.</span>
+            <label for="bPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+            <input class="form-control" type="tel" id="bPhone" placeholder="+1 555 000 0000" />
           </div>
-        </div>
-
-        <div class="form-group">
-          <label for="bPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
-          <input class="form-control" type="tel" id="bPhone" placeholder="+1 555 000 0000" />
         </div>
 
         <div id="sessionBadge" style="display:none;margin-bottom:.85rem;padding:.6rem .85rem;
@@ -974,6 +975,15 @@ select.form-control {
           <button type="button" id="formSignOutBtn" style="margin-left:auto;font-size:.78rem;font-weight:600;
                   color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;
                   text-decoration:underline">Sign out</button>
+        </div>
+
+        <!-- Email confirmation opt-in (shown only when SMTP is configured) -->
+        <div id="emailNotifyRow" style="display:none;margin-bottom:.85rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem;color:var(--text-muted)">
+            <input type="checkbox" id="bSendEmail" checked
+                   style="width:15px;height:15px;accent-color:var(--text);flex-shrink:0;cursor:pointer">
+            Send me a confirmation email
+          </label>
         </div>
 
         <span class="form-error" id="errConflict" style="display:block;margin-bottom:.75rem"></span>
@@ -1194,6 +1204,33 @@ select.form-control {
         <button type="submit" class="btn btn-primary" id="saveProfileBtn">Save Changes</button>
       </div>
     </form>
+
+    <!-- Password change — local accounts only -->
+    <div id="pwChangeSection" style="display:none;border-top:1px solid var(--border);margin-top:1.5rem;padding-top:1.25rem">
+      <div style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;
+                  letter-spacing:.07em;margin-bottom:1rem">Change Password</div>
+      <div class="form-group">
+        <label for="pwCurrent">Current Password</label>
+        <input class="form-control" type="password" id="pwCurrent" placeholder="Your current password"
+               autocomplete="current-password" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="pwNew">New Password</label>
+          <input class="form-control" type="password" id="pwNew" placeholder="At least 8 characters"
+                 autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label for="pwConfirm">Confirm New</label>
+          <input class="form-control" type="password" id="pwConfirm" placeholder="Repeat new password"
+                 autocomplete="new-password" />
+        </div>
+      </div>
+      <span id="pwError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem;display:block"></span>
+      <div style="display:flex;justify-content:flex-end">
+        <button type="button" class="btn btn-outline btn-sm" id="changePasswordBtn">Update Password</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1223,6 +1260,7 @@ let activeFilter  = null;  // null = all; number = resource id; 'cat-N' = catego
 let collapsedCats = new Set(); // category IDs the user has collapsed
 let currentTz     = Intl.DateTimeFormat().resolvedOptions().timeZone;
 let ldapEnabled   = false; // overridden by settings fetch
+let smtpEnabled   = false; // overridden by features fetch
 
 // ── Theme ────────────────────────────────────────────────
 const html       = document.documentElement;
@@ -1927,19 +1965,6 @@ function openBookingModal(start = '', end = '') {
   }
 
   populateTzSelect(document.getElementById('bTimezone'), currentTz);
-
-  // Auto-populate from session
-  if (userSession) {
-    const nameParts = userSession.name.split(' ');
-    document.getElementById('bName').value  = userSession.name;
-    document.getElementById('bEmail').value = userSession.email;
-    document.getElementById('bPhone').value = userSession.phone || '';
-    document.getElementById('bName').readOnly  = true;
-    document.getElementById('bEmail').readOnly = true;
-  } else {
-    document.getElementById('bName').readOnly  = false;
-    document.getElementById('bEmail').readOnly = false;
-  }
   updateAuthUI(); // refresh badge visibility
 
   // Run conflict check now that all fields are set (covers calendar-click pre-fill case)
@@ -1961,9 +1986,6 @@ function resetBookingForm() {
   // reset() clears selects too, so restore defaults
   document.getElementById('bStartTime').value = '09:00';
   document.getElementById('bEndTime').value   = '10:00';
-  // Restore readonly state based on session
-  document.getElementById('bName').readOnly  = !!userSession;
-  document.getElementById('bEmail').readOnly = !!userSession;
   bookFormView.style.display = '';
   bookSuccessView.classList.remove('show');
   document.querySelectorAll('.form-error').forEach(el => el.classList.remove('show'));
@@ -2025,9 +2047,6 @@ document.getElementById('bookingForm').addEventListener('submit', async (e) => {
     }
   }
 
-  const booked_by_name  = require('bName',  'errName',  v => v.length > 0);
-  const booked_by_email = require('bEmail', 'errEmail', v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
-
   if (!valid) return;
 
   // Convert the wall-clock times (in the booking's timezone) to UTC ISO strings.
@@ -2043,18 +2062,14 @@ document.getElementById('bookingForm').addEventListener('submit', async (e) => {
   btn.textContent = 'Saving…';
 
   try {
-    const phone = document.getElementById('bPhone').value.trim();
-
     const payload = {
-      resource_id:     parseInt(resource_id),
+      resource_id:              parseInt(resource_id),
       title,
-      description:     document.getElementById('bDesc').value.trim(),
-      booked_by_name,
-      booked_by_email: document.getElementById('bEmail').value.trim(),
-      booked_by_phone: phone || undefined,
+      description:              document.getElementById('bDesc').value.trim(),
       start_time,
       end_time,
-      timezone:        tz,
+      timezone:                 tz,
+      send_confirmation_email:  smtpEnabled && document.getElementById('bSendEmail')?.checked,
     };
 
     const appt = await apiFetch('/appointments', {
@@ -2481,12 +2496,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('userSignOutBtn').addEventListener('click', signOut);
-document.getElementById('formSignOutBtn')?.addEventListener('click', () => {
-  signOut();
-  document.getElementById('bName').value  = '';
-  document.getElementById('bEmail').value = '';
-  document.getElementById('bPhone').value = '';
-});
+document.getElementById('formSignOutBtn')?.addEventListener('click', signOut);
 
 // ── Profile Modal ────────────────────────────────────────
 const profileModal = document.getElementById('profileModal');
@@ -2514,6 +2524,14 @@ function openProfileModal() {
     el.style.cursor  = isLdap ? 'not-allowed' : '';
   });
   if (ldapNote) ldapNote.style.display = isLdap ? 'block' : 'none';
+
+  // Password change only for local accounts
+  const pwSection = document.getElementById('pwChangeSection');
+  if (pwSection) pwSection.style.display = isLdap ? 'none' : '';
+  // Clear password fields and error on open
+  ['pwCurrent','pwNew','pwConfirm'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const pwErr = document.getElementById('pwError');
+  if (pwErr) { pwErr.style.display = 'none'; pwErr.textContent = ''; }
 
   profileModal.classList.add('open');
   (isLdap ? tzSel : document.getElementById('profFirstName')).focus();
@@ -2576,6 +2594,38 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Save Changes';
+  }
+});
+
+document.getElementById('changePasswordBtn')?.addEventListener('click', async () => {
+  const current  = document.getElementById('pwCurrent').value;
+  const newPw    = document.getElementById('pwNew').value;
+  const confirm  = document.getElementById('pwConfirm').value;
+  const errEl    = document.getElementById('pwError');
+  const btn      = document.getElementById('changePasswordBtn');
+
+  errEl.style.display = 'none';
+  errEl.textContent   = '';
+
+  if (!current)           { errEl.textContent = 'Current password is required.';  errEl.style.display = 'block'; return; }
+  if (newPw.length < 8)  { errEl.textContent = 'New password must be at least 8 characters.'; errEl.style.display = 'block'; return; }
+  if (newPw !== confirm)  { errEl.textContent = 'Passwords do not match.';         errEl.style.display = 'block'; return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+  try {
+    await apiFetch('/auth/password', {
+      method: 'PUT',
+      body:   JSON.stringify({ current_password: current, new_password: newPw }),
+    });
+    ['pwCurrent','pwNew','pwConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+    showToast('Password updated successfully.');
+  } catch (err) {
+    errEl.textContent   = err.message || 'Could not update password.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Update Password';
   }
 });
 
@@ -2667,15 +2717,19 @@ myBookingsModal.addEventListener('click', e => { if (e.target === myBookingsModa
 // ════════════════════════════════════════════════════════
 (async () => {
   try {
-    // Load session, settings, and resources in parallel
-    const [, settings] = await Promise.all([
+    // Load session, settings, features, and resources in parallel
+    const [, settings, features] = await Promise.all([
       loadUserSession(),
       apiFetch('/settings').catch(() => ({})),
+      apiFetch('/features').catch(() => ({})),
       loadResources(),
     ]);
     if (settings && settings.ldap_enabled) {
       ldapEnabled = settings.ldap_enabled === true || settings.ldap_enabled === 'true';
     }
+    smtpEnabled = !!(features && features.smtp_enabled);
+    const emailNotifyRow = document.getElementById('emailNotifyRow');
+    if (emailNotifyRow) emailNotifyRow.style.display = smtpEnabled ? '' : 'none';
     initCalendar();
   } catch (err) {
     showToast('Could not connect to server. Is the backend running?', 'error');

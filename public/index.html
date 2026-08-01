@@ -1118,34 +1118,90 @@ select.form-control {
       </button>
     </div>
 
-    <p id="loginDesc" style="font-size:.875rem;color:var(--text-muted);margin-bottom:1.25rem">
-      Enter your email and password to sign in.
-    </p>
-
-    <form id="loginForm" novalidate>
-      <div class="form-group">
-        <label for="loginEmail">Email Address</label>
-        <input class="form-control" type="email" id="loginEmail"
-               placeholder="your@email.com" autocomplete="email" required />
-      </div>
-      <div class="form-group">
-        <label for="loginPassword">Password</label>
-        <input class="form-control" type="password" id="loginPassword"
-               placeholder="Your password" autocomplete="current-password" required />
-      </div>
-      <span id="loginError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem"></span>
-      <button type="submit" class="btn btn-primary" id="loginSubmitBtn" style="width:100%">
-        Sign In
-      </button>
-    </form>
-
-    <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--border);text-align:center">
-      <p style="font-size:.85rem;color:var(--text-muted)">
-        New here?
-        <a href="/register.html" style="color:var(--text);font-weight:600;text-decoration:none">
-          Create an account →
-        </a>
+    <!-- ── Sign-in view ───────────────────────────────── -->
+    <div id="loginView">
+      <p id="loginDesc" style="font-size:.875rem;color:var(--text-muted);margin-bottom:1.25rem">
+        Enter your email and password to sign in.
       </p>
+
+      <form id="loginForm" novalidate>
+        <div class="form-group">
+          <label for="loginEmail">Email Address</label>
+          <input class="form-control" type="email" id="loginEmail"
+                 placeholder="your@email.com" autocomplete="email" required />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input class="form-control" type="password" id="loginPassword"
+                 placeholder="Your password" autocomplete="current-password" required />
+        </div>
+        <span id="loginError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem"></span>
+        <button type="submit" class="btn btn-primary" id="loginSubmitBtn" style="width:100%">
+          Sign In
+        </button>
+      </form>
+
+      <div style="margin-top:1rem;text-align:right">
+        <button type="button" id="showForgotBtn"
+                style="background:none;border:none;cursor:pointer;font-size:.82rem;
+                       color:var(--text-muted);text-decoration:underline;padding:0">
+          Forgot your password?
+        </button>
+      </div>
+
+      <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);text-align:center">
+        <p style="font-size:.85rem;color:var(--text-muted)">
+          New here?
+          <a href="/register.html" style="color:var(--text);font-weight:600;text-decoration:none">
+            Create an account →
+          </a>
+        </p>
+      </div>
+    </div>
+
+    <!-- ── Forgot-password view ────────────────────────── -->
+    <div id="forgotView" style="display:none">
+      <p style="font-size:.875rem;color:var(--text-muted);margin-bottom:1.25rem">
+        Enter your email and we'll send a reset link — valid for 1 hour.
+      </p>
+      <form id="forgotForm" novalidate>
+        <div class="form-group">
+          <label for="forgotEmail">Email Address</label>
+          <input class="form-control" type="email" id="forgotEmail"
+                 placeholder="your@email.com" autocomplete="email" required />
+        </div>
+        <span id="forgotError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem"></span>
+        <button type="submit" class="btn btn-primary" id="forgotSubmitBtn" style="width:100%">
+          Send Reset Link
+        </button>
+      </form>
+      <div style="margin-top:1rem;text-align:center">
+        <button type="button" id="backToLoginBtn"
+                style="background:none;border:none;cursor:pointer;font-size:.82rem;
+                       color:var(--text-muted);text-decoration:underline;padding:0">
+          ← Back to sign in
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Forgot-password success view ───────────────── -->
+    <div id="forgotSuccessView" style="display:none;text-align:center;padding:1rem 0">
+      <div style="width:48px;height:48px;background:var(--surface2);border-radius:50%;
+                  display:flex;align-items:center;justify-content:center;margin:0 auto 1rem">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
+      </div>
+      <p style="font-weight:600;margin-bottom:.4rem">Check your inbox</p>
+      <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1.5rem">
+        If that email belongs to a local account, a reset link is on its way.
+      </p>
+      <button type="button" id="forgotDoneBtn"
+              style="background:none;border:none;cursor:pointer;font-size:.82rem;
+                     color:var(--text-muted);text-decoration:underline;padding:0">
+        ← Back to sign in
+      </button>
     </div>
   </div>
 </div>
@@ -2449,10 +2505,15 @@ function openLoginModal() {
   document.getElementById('loginEmail').value    = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginError').style.display = 'none';
+  showLoginView();
   loginModal.classList.add('open');
   setTimeout(() => document.getElementById('loginEmail').focus(), 50);
 }
-function closeLoginModal() { loginModal.classList.remove('open'); pendingSlot = null; }
+function closeLoginModal() {
+  loginModal.classList.remove('open');
+  pendingSlot = null;
+  showLoginView();
+}
 
 document.getElementById('signInBtn').addEventListener('click', openLoginModal);
 document.getElementById('closeLoginBtn').addEventListener('click', closeLoginModal);
@@ -2500,6 +2561,45 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Sign In';
+  }
+});
+
+// ── Forgot-password flow ─────────────────────────────────
+function showLoginView()        { document.getElementById('loginView').style.display = ''; document.getElementById('forgotView').style.display = 'none'; document.getElementById('forgotSuccessView').style.display = 'none'; }
+function showForgotView()       { document.getElementById('loginView').style.display = 'none'; document.getElementById('forgotView').style.display = ''; document.getElementById('forgotSuccessView').style.display = 'none'; setTimeout(() => document.getElementById('forgotEmail').focus(), 50); }
+function showForgotSuccessView(){ document.getElementById('loginView').style.display = 'none'; document.getElementById('forgotView').style.display = 'none'; document.getElementById('forgotSuccessView').style.display = ''; }
+
+document.getElementById('showForgotBtn').addEventListener('click', showForgotView);
+document.getElementById('backToLoginBtn').addEventListener('click', showLoginView);
+document.getElementById('forgotDoneBtn').addEventListener('click', () => { showLoginView(); closeLoginModal(); });
+
+document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email  = document.getElementById('forgotEmail').value.trim();
+  const errEl  = document.getElementById('forgotError');
+  const btn    = document.getElementById('forgotSubmitBtn');
+
+  errEl.style.display = 'none';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errEl.textContent   = 'Please enter a valid email address.';
+    errEl.style.display = '';
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Sending…';
+  try {
+    await apiFetch('/auth/forgot-password', {
+      method: 'POST',
+      body:   JSON.stringify({ email }),
+    });
+    showForgotSuccessView();
+  } catch {
+    // Show success anyway — don't reveal if the email exists
+    showForgotSuccessView();
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Send Reset Link';
   }
 });
 

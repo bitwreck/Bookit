@@ -2,7 +2,9 @@
 const express        = require('express');
 const bcrypt         = require('bcryptjs');
 const jwt            = require('jsonwebtoken');
+const crypto         = require('crypto');
 const ldap           = require('ldapjs');
+const rateLimit      = require('express-rate-limit');
 const db             = require('../database');
 const requireAdmin   = require('../middleware/auth');
 const notifications  = require('../services/notifications');
@@ -88,6 +90,33 @@ function buildICS(appt) {
   ];
   return lines.join('\r\n');
 }
+
+// ═══════════════════════════════════════════════════════════
+// Rate limiters
+// ═══════════════════════════════════════════════════════════
+const loginLimiter = rateLimit({
+  windowMs:       15 * 60 * 1000, // 15 minutes
+  max:            10,
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { error: 'Too many login attempts. Please wait 15 minutes and try again.' },
+});
+
+const registerLimiter = rateLimit({
+  windowMs:       60 * 60 * 1000, // 1 hour
+  max:            5,
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { error: 'Too many registration attempts. Please try again in an hour.' },
+});
+
+const forgotLimiter = rateLimit({
+  windowMs:       60 * 60 * 1000, // 1 hour
+  max:            5,
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { error: 'Too many password reset requests. Please try again in an hour.' },
+});
 
 // ═══════════════════════════════════════════════════════════
 // Public feature flags (no auth required)
@@ -285,7 +314,7 @@ async function ldapAuthenticate(email, password, ip = null) {
 // ═══════════════════════════════════════════════════════════
 // User Auth
 // ═══════════════════════════════════════════════════════════
-router.post('/auth/register', ah(async (req, res) => {
+router.post('/auth/register', registerLimiter, ah(async (req, res) => {
   const { first_name, last_name, email, phone, timezone, password } = req.body || {};
   if (!first_name?.trim() || !last_name?.trim() || !email?.trim())
     return res.status(400).json({ error: 'First name, last name, and email are required' });
@@ -316,7 +345,7 @@ router.post('/auth/register', ah(async (req, res) => {
   res.status(201).json({ token, user: { id: result.insertId, name, email: clean, phone: phone?.trim() || null, timezone: tz, authSource: 'local' } });
 }));
 
-router.post('/auth/login', ah(async (req, res) => {
+router.post('/auth/login', loginLimiter, ah(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required' });
   if (!password)      return res.status(400).json({ error: 'Password is required' });
@@ -517,6 +546,64 @@ router.put('/auth/password', ah(async (req, res) => {
 
   const newHash = await bcrypt.hash(new_password, 10);
   await db.execute('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, user.id]);
+  res.json({ ok: true });
+}));
+
+router.post('/auth/forgot-password', forgotLimiter, ah(async (req, res) => {
+  const clean = ((req.body || {}).email || '').trim().toLowerCase();
+
+  // Always respond 200 — never reveal whether an account exists
+  res.json({ ok: true });
+
+  if (!clean) return;
+
+  try {
+    const [[user]] = await db.execute(
+      'SELECT id, name, email, auth_source FROM users WHERE email = ?', [clean]
+    );
+    // Only local accounts can reset via email; LDAP passwords are managed externally
+    if (!user || user.auth_source !== 'local') return;
+
+    // One active token per user — delete any previous ones
+    await db.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+
+    const token      = crypto.randomBytes(32).toString('hex');
+    const tokenHash  = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt  = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await db.execute(
+      'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
+      [user.id, tokenHash, expiresAt]
+    );
+
+    const base     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+    const resetUrl = `${base}/reset-password.html?token=${token}`;
+
+    notifications.sendPasswordReset(user, resetUrl)
+      .catch(err => console.error('[notifications] password reset email failed:', err.message));
+  } catch (err) {
+    console.error('[forgot-password]', err.message);
+  }
+}));
+
+router.post('/auth/reset-password', ah(async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password || password.length < 8)
+    return res.status(400).json({ error: 'Token and a password of at least 8 characters are required.' });
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+  const [[record]] = await db.execute(
+    'SELECT * FROM password_reset_tokens WHERE token_hash = ? AND expires_at > NOW()',
+    [tokenHash]
+  );
+  if (!record)
+    return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' });
+
+  const newHash = await bcrypt.hash(password, 10);
+  await db.execute('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, record.user_id]);
+  await db.execute('DELETE FROM password_reset_tokens WHERE id = ?', [record.id]);
+
   res.json({ ok: true });
 }));
 

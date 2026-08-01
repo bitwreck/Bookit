@@ -179,4 +179,42 @@ async function sendCancellationConfirmation(appt) {
   return sendEmail({ to: appt.booked_by_email, subject, text, html });
 }
 
-module.exports = { sendEmail, sendSMS, sendCancellationCode, sendBookingConfirmation, sendCancellationConfirmation };
+// ── Password reset ───────────────────────────────────────────
+async function sendPasswordReset(user, resetUrl) {
+  if (!process.env.SMTP_HOST) return false;
+
+  const subject = 'Reset your BookIt password';
+  const text =
+    `Hi ${user.name},\n\n` +
+    `You requested a password reset for your BookIt account.\n\n` +
+    `Click the link below to set a new password:\n${resetUrl}\n\n` +
+    `This link expires in 1 hour.\n` +
+    `If you didn't request this, you can safely ignore this email.`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#0f172a">
+      <h2>Reset your password</h2>
+      <p>Hi ${user.name},</p>
+      <p>You requested a password reset for your BookIt account. Click the button below to choose a new password.</p>
+      <div style="text-align:center;margin:2rem 0">
+        <a href="${resetUrl}"
+           style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;
+                  padding:.75rem 1.5rem;border-radius:8px;font-weight:600;font-size:.95rem">
+          Reset Password
+        </a>
+      </div>
+      <p style="color:#64748b;font-size:.875rem">
+        This link expires in <strong>1 hour</strong>.<br>
+        If you didn't request a password reset, you can safely ignore this email.
+      </p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:1.5rem 0">
+      <p style="color:#94a3b8;font-size:.78rem">
+        Can't click the button? Copy and paste this link:<br>
+        <a href="${resetUrl}" style="color:#64748b;word-break:break-all">${resetUrl}</a>
+      </p>
+    </div>
+  `;
+
+  return sendEmail({ to: user.email, subject, text, html });
+}
+
+module.exports = { sendEmail, sendSMS, sendCancellationCode, sendBookingConfirmation, sendCancellationConfirmation, sendPasswordReset };

@@ -438,8 +438,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; color: var(--primary); }
         </div>
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-val" id="statTotal">–</div>
-            <div class="stat-label">Total Bookings</div>
+            <div class="stat-val" id="statPast">–</div>
+            <div class="stat-label">Confirmed (past)</div>
           </div>
           <div class="stat-card">
             <div class="stat-val" id="statToday">–</div>
@@ -447,7 +447,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; color: var(--primary); }
           </div>
           <div class="stat-card">
             <div class="stat-val" id="statUpcoming">–</div>
-            <div class="stat-label">Upcoming (7 days)</div>
+            <div class="stat-label">Upcoming</div>
           </div>
           <div class="stat-card">
             <div class="stat-val" id="statResources">–</div>
@@ -714,13 +714,15 @@ th.sortable.sort-active .sort-icon { opacity: 1; color: var(--primary); }
             <table>
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Email</th>
+                  <th class="sortable" onclick="sortUsers('id')">#<span class="sort-icon" data-col="id"></span></th>
+                  <th class="sortable" onclick="sortUsers('name')">Name<span class="sort-icon" data-col="name"></span></th>
+                  <th class="sortable" onclick="sortUsers('email')">Email<span class="sort-icon" data-col="email"></span></th>
                   <th>Phone</th>
-                  <th>Auth</th>
-                  <th>Bookings</th>
-                  <th>Registered</th>
+                  <th class="sortable" onclick="sortUsers('auth_source')">Auth<span class="sort-icon" data-col="auth_source"></span></th>
+                  <th class="sortable" onclick="sortUsers('booking_count')">Bookings<span class="sort-icon" data-col="booking_count"></span></th>
+                  <th class="sortable" onclick="sortUsers('last_login_at')">Last Login<span class="sort-icon" data-col="last_login_at"></span></th>
+                  <th class="sortable" onclick="sortUsers('last_booking_at')">Last Booking<span class="sort-icon" data-col="last_booking_at"></span></th>
+                  <th class="sortable" onclick="sortUsers('created_at')">Registered<span class="sort-icon" data-col="created_at"></span></th>
                   <th></th>
                 </tr>
               </thead>
@@ -1263,7 +1265,7 @@ function showPage(name) {
   if (name === 'dashboard')    { loadDashboardStats(); startDashRefresh(); } else { stopDashRefresh(); }
   if (name === 'appointments') { apptPage = 1; loadAppointments(); }
   if (name === 'activitylog')  { actLogPage = 1; loadActivityLog(); }
-  if (name === 'users')        { usersPage  = 1; loadUsers(); }
+  if (name === 'users')        { usersPage = 1; loadUsers(); }
   if (name === 'settings')     { loadSettings(); }
 }
 
@@ -1358,7 +1360,7 @@ function updateDashLabel() {
 }
 
 function renderDashboard(stats) {
-  document.getElementById('statTotal').textContent     = stats.total;
+  document.getElementById('statPast').textContent      = stats.confirmed_past;
   document.getElementById('statToday').textContent     = stats.today;
   document.getElementById('statUpcoming').textContent  = stats.upcoming;
   document.getElementById('statResources').textContent = stats.resource_count;
@@ -1746,14 +1748,13 @@ function renderResourceTable() {
   }
   empty.style.display = 'none';
   tbody.innerHTML = resources.map(r => {
-    const bookings = appointments.filter(a => a.resource_id === r.id && a.status !== 'cancelled').length;
     return `
       <tr>
         <td><span class="rdot" style="background:${r.color};width:18px;height:18px;border-radius:4px"></span></td>
         <td style="font-weight:600">${r.name}</td>
         <td style="color:var(--text-muted);font-size:.82rem">${r.category_name || '–'}</td>
         <td style="color:var(--text-muted)">${r.description || '–'}</td>
-        <td>${bookings}</td>
+        <td>${r.booking_count ?? '–'}</td>
         <td style="white-space:nowrap">
           <button class="btn-icon" onclick="editResource(${r.id})" title="Edit" style="margin-right:4px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -2331,8 +2332,10 @@ document.getElementById('actLogLimit')?.addEventListener('change', e => {
 // ════════════════════════════════════════════════════════
 // Users
 // ════════════════════════════════════════════════════════
-let usersPage  = 1;
-let usersLimit = 25;
+let usersPage    = 1;
+let usersLimit   = 25;
+let usersSortBy  = 'created_at';
+let usersSortDir = 'desc';
 
 async function loadUsers() {
   const tbody = document.getElementById('usersTable');
@@ -2342,7 +2345,7 @@ async function loadUsers() {
   const pages = document.getElementById('usersPages');
 
   try {
-    const res = await api(`/users?limit=${usersLimit}&page=${usersPage}&search=${encodeURIComponent(usersSearch)}`);
+    const res = await api(`/users?limit=${usersLimit}&page=${usersPage}&search=${encodeURIComponent(usersSearch)}&sort_by=${usersSortBy}&sort_dir=${usersSortDir}`);
     const { total, page, limit, pages: totalPages, data } = res;
 
     if (!data.length && page === 1) {
@@ -2374,6 +2377,8 @@ async function loadUsers() {
             ${u.booking_count}
           </span>
         </td>
+        <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${u.last_login_at   ? fmtDt(u.last_login_at)   : '—'}</td>
+        <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${u.last_booking_at ? fmtDt(u.last_booking_at) : '—'}</td>
         <td style="white-space:nowrap;color:var(--text-muted);font-size:.82rem">${fmtDt(u.created_at)}</td>
         <td style="display:flex;gap:.4rem;align-items:center">
           ${u.auth_source !== 'ldap' ? `
@@ -2417,6 +2422,7 @@ async function loadUsers() {
 
     pages.innerHTML = btns.join('');
     pager.style.display = total > limit ? 'flex' : 'none';
+    updateUsersSortHeaders();
 
   } catch (err) {
     toast(err.message || 'Failed to load users', 'error');
@@ -2426,6 +2432,28 @@ async function loadUsers() {
 function gotoUsersPage(p) {
   usersPage = p;
   loadUsers();
+}
+
+function sortUsers(col) {
+  if (usersSortBy === col) {
+    usersSortDir = usersSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    usersSortBy  = col;
+    // Counts and dates default desc; text fields default asc
+    usersSortDir = ['booking_count','last_login_at','last_booking_at','created_at','id'].includes(col) ? 'desc' : 'asc';
+  }
+  usersPage = 1;
+  loadUsers();
+}
+
+function updateUsersSortHeaders() {
+  document.querySelectorAll('#page-users th.sortable').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if (!icon) return;
+    const col = icon.dataset.col;
+    th.classList.toggle('sort-active', col === usersSortBy);
+    icon.textContent = col === usersSortBy ? (usersSortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  });
 }
 
 async function deleteUser(id, email, name) {

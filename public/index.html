@@ -584,6 +584,156 @@ select.form-control {
   box-shadow: none;
 }
 
+/* ── Mobile filter bar (resource pills, shown below 860px) */
+.mobile-filter-bar {
+  display: none;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: .5rem 1rem;
+  gap: .4rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  scrollbar-width: none; /* Firefox */
+}
+.mobile-filter-bar::-webkit-scrollbar { display: none; }
+@media (max-width: 860px) {
+  .mobile-filter-bar { display: flex; }
+}
+.mob-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .3rem .8rem;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.mob-pill:hover { background: var(--surface2); color: var(--text); }
+.mob-pill.active {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+.mob-pill-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── My Bookings Modal ─────────────────────────────────── */
+.mb-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: .5rem .85rem;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.mb-tab:hover { color: var(--text); }
+.mb-tab.active { color: var(--text); border-bottom-color: var(--text); }
+.mb-tab-count {
+  background: var(--surface2);
+  border-radius: 99px;
+  font-size: .72rem;
+  padding: 1px 7px;
+  min-width: 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.mb-row {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .12s;
+  border-radius: 6px;
+  margin: 0 -.5rem;
+  padding-left: .5rem;
+  padding-right: .5rem;
+}
+.mb-row:last-child { border-bottom: none; }
+.mb-row:hover { background: var(--surface2); }
+.mb-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.mb-info { flex: 1; min-width: 0; }
+.mb-title {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: .15rem;
+}
+.mb-meta {
+  font-size: .78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.mb-resource {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.mb-empty {
+  text-align: center;
+  padding: 2.5rem 0;
+  color: var(--text-muted);
+  font-size: .875rem;
+}
+.mb-loading {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--text-muted);
+  font-size: .85rem;
+}
+
+/* ── Calendar loading indicator ────────────────────────── */
+.cal-loading-indicator {
+  position: absolute;
+  top: 1.1rem;
+  right: 1.25rem;
+  display: none;
+  align-items: center;
+  gap: .4rem;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 10;
+}
+.cal-loading-indicator.active { display: flex; }
+@keyframes cal-spin { to { transform: rotate(360deg); } }
+.cal-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: cal-spin .65s linear infinite;
+}
+
 /* ── Scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -618,6 +768,19 @@ select.form-control {
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
       </button>
+      <button class="btn btn-ghost btn-sm" id="myBookingsBtn" title="My Bookings">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        My Bookings
+      </button>
+      <button class="btn btn-primary btn-sm" id="openBookBtn" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        New Booking
+      </button>
       <button class="btn btn-ghost btn-sm" id="userSignOutBtn">Sign Out</button>
     </div>
     <button class="btn btn-outline btn-sm" id="signInBtn" style="display:none">
@@ -627,13 +790,6 @@ select.form-control {
         <line x1="15" y1="12" x2="3" y2="12"/>
       </svg>
       Sign In
-    </button>
-
-    <button class="btn btn-primary btn-sm" id="openBookBtn" style="display:none">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-      New Booking
     </button>
     <button class="btn-icon" id="themeToggle" title="Toggle theme">
       <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -652,6 +808,9 @@ select.form-control {
     </a>
   </div>
 </header>
+
+<!-- ── Mobile resource filter bar (desktop sidebar hidden on small screens) -->
+<div class="mobile-filter-bar" id="mobileFilterBar" role="toolbar" aria-label="Filter by resource"></div>
 
 <!-- ── Main ───────────────────────────────────────────── -->
 <div class="main-layout">
@@ -689,7 +848,11 @@ select.form-control {
   </aside>
 
   <!-- Calendar -->
-  <div class="calendar-wrapper">
+  <div class="calendar-wrapper" style="position:relative">
+    <div class="cal-loading-indicator" id="calLoading">
+      <div class="cal-spinner"></div>
+      Loading…
+    </div>
     <div id="calendar"></div>
   </div>
 
@@ -754,6 +917,13 @@ select.form-control {
             <select class="form-control" id="bEndTime"></select>
           </div>
           <span class="form-error" id="errEnd">Please select an end date and time.</span>
+          <div id="bookingDuration" style="display:none;margin-top:.35rem;font-size:.78rem;
+               color:var(--text-muted);display:flex;align-items:center;gap:.3rem">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span id="bookingDurationText"></span>
+          </div>
         </div>
 
         <!-- Real-time conflict warning -->
@@ -893,6 +1063,34 @@ select.form-control {
       </div>
       <span id="cancelError" style="color:#ef4444;font-size:.8rem;margin-top:.5rem;display:none"></span>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- My Bookings Modal -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="myBookingsModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="myBookingsTitle" style="max-width:580px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="myBookingsTitle">My Bookings</h2>
+      <button class="modal-close" id="closeMyBookingsBtn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:.25rem;border-bottom:1px solid var(--border);margin-bottom:1.25rem">
+      <button class="mb-tab active" id="mbTabUpcoming" data-tab="upcoming">
+        Upcoming <span class="mb-tab-count" id="mbCountUpcoming"></span>
+      </button>
+      <button class="mb-tab" id="mbTabPast" data-tab="past">
+        Past <span class="mb-tab-count" id="mbCountPast"></span>
+      </button>
+    </div>
+
+    <div id="myBookingsBody" style="min-height:120px"></div>
   </div>
 </div>
 
@@ -1151,6 +1349,36 @@ function onStartChange() {
       }
     }
   }
+  updateDurationDisplay();
+}
+
+function updateDurationDisplay() {
+  const startDate = document.getElementById('bStartDate').value;
+  const startTime = document.getElementById('bStartTime').value;
+  const endDate   = document.getElementById('bEndDate').value;
+  const endTime   = document.getElementById('bEndTime').value;
+  const el        = document.getElementById('bookingDuration');
+  const txt       = document.getElementById('bookingDurationText');
+  if (!el || !txt) return;
+
+  if (!startDate || !startTime || !endDate || !endTime) { el.style.display = 'none'; return; }
+
+  const startMs = new Date(`${startDate}T${startTime}:00`).getTime();
+  const endMs   = new Date(`${endDate}T${endTime}:00`).getTime();
+  const diffMin = Math.round((endMs - startMs) / 60000);
+
+  if (diffMin <= 0) { el.style.display = 'none'; return; }
+
+  const days = Math.floor(diffMin / 1440);
+  const hrs  = Math.floor((diffMin % 1440) / 60);
+  const mins = diffMin % 60;
+  const parts = [];
+  if (days) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+  if (hrs)  parts.push(`${hrs} hr${hrs !== 1 ? 's' : ''}`);
+  if (mins) parts.push(`${mins} min`);
+
+  txt.textContent = parts.join(' ');
+  el.style.display = 'flex';
 }
 
 buildTimeOptions(document.getElementById('bStartTime'), '09:00');
@@ -1224,6 +1452,9 @@ async function checkConflict() {
 ['bResource','bStartDate','bStartTime','bEndDate','bEndTime','bTimezone'].forEach(id => {
   document.getElementById(id)?.addEventListener('change', scheduleConflictCheck);
 });
+['bStartDate','bStartTime','bEndDate','bEndTime'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', updateDurationDisplay);
+});
 
 document.getElementById('tzSelect').addEventListener('change', e => {
   currentTz = e.target.value;
@@ -1239,8 +1470,12 @@ document.getElementById('tzSelect').addEventListener('change', e => {
 async function apiFetch(path, opts = {}) {
   // Destructure headers out of opts so ...restOpts doesn't overwrite our merged headers.
   const { headers: extraHeaders, ...restOpts } = opts;
+  // Auto-inject stored JWT so callers don't have to repeat it.
+  // Caller-supplied headers (extraHeaders) can still override if needed.
+  const token = localStorage.getItem('bt-user-token');
+  const authHeader = token ? { Authorization: 'Bearer ' + token } : {};
   const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json', ...(extraHeaders || {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeader, ...(extraHeaders || {}) },
     ...restOpts,
   });
 
@@ -1312,6 +1547,7 @@ function renderResourceSidebar() {
 
   list.innerHTML = '';
   all.classList.toggle('active', activeFilter === null);
+  renderMobileFilterBar();
 
   // Group resources by category
   const catMap = new Map(); // category_id → { name, resources[] }
@@ -1465,7 +1701,7 @@ let activityTimer;
 function startActivityPolling() {
   loadActivity();
   clearInterval(activityTimer);
-  activityTimer = setInterval(loadActivity, 30000);
+  activityTimer = setInterval(loadActivity, 60000);
 }
 
 function setFilter(id) {
@@ -1481,10 +1717,67 @@ function setFilter(id) {
     el.classList.toggle('active', id === catKey);
   });
   document.getElementById('filterAll').classList.toggle('active', id === null);
+
+  // Sync mobile filter pills
+  document.querySelectorAll('.mob-pill').forEach(pill => {
+    const raw = pill.dataset.filter;
+    const match = raw === '__all__'
+      ? id === null
+      : typeof id === 'number'
+        ? parseInt(raw) === id
+        : raw === id;
+    pill.classList.toggle('active', match);
+  });
+
   if (calendar) calendar.refetchEvents();
 }
 
 document.getElementById('filterAll').addEventListener('click', () => setFilter(null));
+
+function renderMobileFilterBar() {
+  const bar = document.getElementById('mobileFilterBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+
+  const makePill = (label, color, filterId) => {
+    const pill = document.createElement('button');
+    pill.className = 'mob-pill';
+    pill.dataset.filter = filterId === null ? '__all__' : String(filterId);
+    const isActive = filterId === null ? activeFilter === null
+      : typeof filterId === 'number' ? activeFilter === filterId : activeFilter === filterId;
+    if (isActive) pill.classList.add('active');
+    if (color) {
+      const dot = document.createElement('span');
+      dot.className = 'mob-pill-dot';
+      dot.style.background = color;
+      pill.appendChild(dot);
+    }
+    pill.appendChild(document.createTextNode(label));
+    pill.addEventListener('click', () => setFilter(filterId));
+    return pill;
+  };
+
+  // "All" pill
+  bar.appendChild(makePill('All', null, null));
+
+  // Group resources by category
+  const catMap = new Map();
+  resources.forEach(r => {
+    if (!catMap.has(r.category_id))
+      catMap.set(r.category_id, { name: r.category_name || 'Uncategorized', resources: [] });
+    catMap.get(r.category_id).resources.push(r);
+  });
+
+  catMap.forEach((cat, catId) => {
+    // Only add a category pill if there are multiple resources in it
+    if (cat.resources.length > 1) {
+      bar.appendChild(makePill(cat.name, null, `cat-${catId}`));
+    }
+    cat.resources.forEach(r => {
+      bar.appendChild(makePill(r.name, r.color, r.id));
+    });
+  });
+}
 
 // Update appointment counts in sidebar
 function updateCounts(events) {
@@ -1529,6 +1822,10 @@ function initCalendar() {
     nowIndicator: true,
     eventDisplay: 'block',
 
+    loading(isLoading) {
+      document.getElementById('calLoading')?.classList.toggle('active', isLoading);
+    },
+
     // Fetch events from our API
     events: async (info, successCb, failureCb) => {
       try {
@@ -1561,8 +1858,13 @@ function initCalendar() {
       }
     },
 
-    // Click on date → open booking form pre-filled
+    // Click on date → open booking form (requires login)
     select(info) {
+      if (!userSession) {
+        openLoginModal();
+        calendar.unselect();
+        return;
+      }
       openBookingModal(info.startStr, info.endStr);
       calendar.unselect();
     },
@@ -1593,6 +1895,11 @@ const bookSuccessView = document.getElementById('bookSuccessView');
 
 function openBookingModal(start = '', end = '') {
   resetBookingForm();
+
+  // Pre-select the resource if the sidebar is filtered to a single resource
+  if (typeof activeFilter === 'number') {
+    document.getElementById('bResource').value = String(activeFilter);
+  }
 
   // Parse date/time directly from the ISO string so we always read the wall-clock
   // time in the calendar's timezone, regardless of the browser's local timezone.
@@ -1635,6 +1942,9 @@ function openBookingModal(start = '', end = '') {
   }
   updateAuthUI(); // refresh badge visibility
 
+  // Run conflict check now that all fields are set (covers calendar-click pre-fill case)
+  scheduleConflictCheck();
+
   bookingModal.classList.add('open');
 }
 
@@ -1661,6 +1971,9 @@ function resetBookingForm() {
   document.getElementById('conflictWarning').style.display = 'none';
   document.getElementById('submitBookBtn').disabled = false;
   document.getElementById('submitBookBtn').title    = '';
+  // Reset duration display
+  const durEl = document.getElementById('bookingDuration');
+  if (durEl) durEl.style.display = 'none';
 }
 
 // Close on backdrop click
@@ -1810,6 +2123,7 @@ function formatDateRange(start, end, tz) {
 // ════════════════════════════════════════════════════════
 const eventModal = document.getElementById('eventModal');
 let currentApptId = null;
+let currentApptCancellable = false; // tracks whether the open event's cancel button should show
 
 function showEventDetail(appt) {
   currentApptId = appt.id;
@@ -1856,18 +2170,19 @@ function showEventDetail(appt) {
   // Cancel button: only for the booking owner who is signed in
   const cancelBtn = document.getElementById('cancelBookingBtn');
   const isOwner   = userSession && userSession.email?.toLowerCase() === appt.booked_by_email?.toLowerCase();
-  cancelBtn.style.display = (!cancelled && isOwner) ? '' : 'none';
+  currentApptCancellable = !cancelled && !!isOwner;
+  cancelBtn.style.display = currentApptCancellable ? '' : 'none';
   resetCancelFlow();
 
   eventModal.classList.add('open');
 }
 
 function resetCancelFlow() {
-  document.getElementById('cancelPanel').style.display       = 'none';
-  document.getElementById('cancelPassword').value            = '';
-  document.getElementById('cancelError').style.display       = 'none';
-  // Restore cancel button visibility based on current appt
-  document.getElementById('cancelBookingBtn').style.display  = '';
+  document.getElementById('cancelPanel').style.display      = 'none';
+  document.getElementById('cancelPassword').value           = '';
+  document.getElementById('cancelError').style.display      = 'none';
+  // Restore cancel button to its correct state for the current appointment
+  document.getElementById('cancelBookingBtn').style.display = currentApptCancellable ? '' : 'none';
 }
 
 // ── Cancel flow — show password panel ────────────────────
@@ -1902,11 +2217,9 @@ document.getElementById('confirmCancelBtn').addEventListener('click', async () =
   btn.textContent = 'Cancelling…';
 
   try {
-    const token = localStorage.getItem('bt-user-token');
     await apiFetch(`/appointments/${currentApptId}/cancel`, {
-      method:  'POST',
-      headers: { Authorization: 'Bearer ' + token },
-      body:    JSON.stringify(isLdap ? {} : { password }),
+      method: 'POST',
+      body:   JSON.stringify(isLdap ? {} : { password }),
     });
     eventModal.classList.remove('open');
     if (calendar) calendar.refetchEvents();
@@ -1933,10 +2246,13 @@ eventModal.addEventListener('click', e => { if (e.target === eventModal) closeEv
 
 // ── Close modals on Escape ───────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    bookingModal.classList.remove('open');
-    eventModal.classList.remove('open');
-  }
+  if (e.key !== 'Escape') return;
+  if (bookingModal.classList.contains('open'))     closeBookingModal();
+  if (eventModal.classList.contains('open'))       closeEventModal();
+  if (loginModal.classList.contains('open'))       closeLoginModal();
+  if (profileModal.classList.contains('open'))     closeProfileModal();
+  const mbModal = document.getElementById('myBookingsModal');
+  if (mbModal?.classList.contains('open')) closeMyBookings();
 });
 
 // ════════════════════════════════════════════════════════
@@ -2032,12 +2348,12 @@ function applyUserTimezone(tz) {
 }
 
 function updateAuthUI() {
-  const sessionUI  = document.getElementById('userSessionUI');
-  const signInBtn  = document.getElementById('signInBtn');
+  const sessionUI   = document.getElementById('userSessionUI');
+  const signInBtn   = document.getElementById('signInBtn');
   const openBookBtn = document.getElementById('openBookBtn');
-  const userChip   = document.getElementById('userChip');
-  const badge      = document.getElementById('sessionBadge');
-  const badgeTxt   = document.getElementById('sessionBadgeText');
+  const userChip    = document.getElementById('userChip');
+  const badge       = document.getElementById('sessionBadge');
+  const badgeTxt    = document.getElementById('sessionBadgeText');
 
   const tzSel   = document.getElementById('tzSelect');
   const tzNote  = document.getElementById('tzProfileNote');
@@ -2085,11 +2401,9 @@ async function loadUserSession() {
     if (cached) { userSession = cached; updateAuthUI(); applyUserTimezone(cached.timezone); }
   } catch { /* ignore */ }
 
-  // Verify token with server and refresh user data
+  // Verify token with server and refresh user data (token auto-injected by apiFetch)
   try {
-    const data = await apiFetch('/auth/me', {
-      headers: { Authorization: 'Bearer ' + token },
-    });
+    const data = await apiFetch('/auth/me');
     userSession = data;
     localStorage.setItem('bt-user', JSON.stringify(data));
     updateAuthUI();
@@ -2239,14 +2553,12 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   btn.textContent = 'Saving…';
 
   try {
-    const token = localStorage.getItem('bt-user-token');
-    const body  = isLdap
+    const body = isLdap
       ? { timezone }
       : { first_name, last_name, email, phone: phone || undefined, timezone };
-    const data  = await apiFetch('/auth/profile', {
-      method:  'PUT',
-      headers: { Authorization: 'Bearer ' + token },
-      body:    JSON.stringify(body),
+    const data = await apiFetch('/auth/profile', {
+      method: 'PUT',
+      body:   JSON.stringify(body),
     });
 
     // Update stored session
@@ -2265,6 +2577,89 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
     btn.disabled    = false;
     btn.textContent = 'Save Changes';
   }
+});
+
+// ════════════════════════════════════════════════════════
+// My Bookings Modal
+// ════════════════════════════════════════════════════════
+const myBookingsModal = document.getElementById('myBookingsModal');
+let mbActiveTab = 'upcoming';
+let myBookingsCache = null; // { upcoming[], past[] }
+
+function openMyBookings() {
+  myBookingsModal.classList.add('open');
+  myBookingsCache = null; // refresh on every open
+  renderMyBookings();
+}
+
+function closeMyBookings() {
+  myBookingsModal.classList.remove('open');
+}
+
+async function renderMyBookings() {
+  const body = document.getElementById('myBookingsBody');
+  body.innerHTML = '<div class="mb-loading">Loading…</div>';
+
+  if (!myBookingsCache) {
+    try {
+      const all = await apiFetch('/appointments/mine');
+      const now = Date.now();
+      myBookingsCache = {
+        upcoming: all.filter(a => new Date(a.end_time).getTime() >= now),
+        past:     all.filter(a => new Date(a.end_time).getTime() < now).reverse(),
+      };
+    } catch (err) {
+      body.innerHTML = `<div class="mb-empty">Could not load bookings.</div>`;
+      return;
+    }
+  }
+
+  // Update tab counts
+  document.getElementById('mbCountUpcoming').textContent = myBookingsCache.upcoming.length || '';
+  document.getElementById('mbCountPast').textContent     = myBookingsCache.past.length     || '';
+
+  const list = myBookingsCache[mbActiveTab];
+  if (!list.length) {
+    const msg = mbActiveTab === 'upcoming' ? 'No upcoming bookings.' : 'No past bookings.';
+    body.innerHTML = `<div class="mb-empty">${msg}</div>`;
+    return;
+  }
+
+  const tz = currentTz;
+  const fmtDate = iso => new Date(iso).toLocaleDateString('en-US', {
+    timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+  const fmtTime = iso => new Date(iso).toLocaleTimeString('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit',
+  });
+
+  body.innerHTML = list.map(a => `
+    <div class="mb-row" onclick="closeMyBookings(); showEventDetail(${JSON.stringify(a).replace(/"/g, '&quot;')})">
+      <div class="mb-dot" style="background:${a.resource_color || '#64748b'}"></div>
+      <div class="mb-info">
+        <div class="mb-title">${a.title}</div>
+        <div class="mb-resource">${a.resource_name || ''}</div>
+        <div class="mb-meta">${fmtDate(a.start_time)} · ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           style="color:var(--text-muted);flex-shrink:0;margin-top:3px">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </div>
+  `).join('');
+}
+
+document.getElementById('myBookingsBtn')?.addEventListener('click', openMyBookings);
+document.getElementById('closeMyBookingsBtn').addEventListener('click', closeMyBookings);
+myBookingsModal.addEventListener('click', e => { if (e.target === myBookingsModal) closeMyBookings(); });
+
+['mbTabUpcoming', 'mbTabPast'].forEach(id => {
+  document.getElementById(id).addEventListener('click', () => {
+    mbActiveTab = id === 'mbTabUpcoming' ? 'upcoming' : 'past';
+    document.querySelectorAll('.mb-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    renderMyBookings();
+  });
 });
 
 // ════════════════════════════════════════════════════════

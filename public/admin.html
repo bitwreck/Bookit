@@ -232,6 +232,12 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 .pager-btn.active { background: var(--text); color: var(--surface); border-color: var(--text); }
 .pager-btn:disabled { opacity: .4; cursor: not-allowed; }
 
+/* ── Sortable column headers ───────────────────────────── */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--text); background: var(--surface2); }
+.sort-icon { display: inline-block; font-style: normal; font-size: .7rem; opacity: .5; margin-left: .2rem; }
+th.sortable.sort-active .sort-icon { opacity: 1; color: var(--primary); }
+
 /* ── Toggle switch ─────────────────────────────────────── */
 .toggle-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -417,7 +423,19 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 
       <!-- ── Dashboard ──────────────────────────────── -->
       <div class="page active" id="page-dashboard">
-        <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1.25rem">Dashboard</h1>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.5rem">
+          <h1 style="font-size:1.4rem;font-weight:800">Dashboard</h1>
+          <div style="display:flex;align-items:center;gap:.75rem">
+            <span id="dashRefreshLabel" style="font-size:.78rem;color:var(--text-muted)"></span>
+            <button class="btn btn-outline btn-sm" id="dashRefreshBtn" onclick="loadDashboardStats()">
+              <svg id="dashRefreshIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Refresh
+            </button>
+          </div>
+        </div>
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-val" id="statTotal">–</div>
@@ -498,12 +516,21 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
       <div class="page" id="page-appointments">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
           <h1 style="font-size:1.4rem;font-weight:800">Appointments</h1>
+          <button class="btn btn-outline btn-sm" onclick="exportApptCSV()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
+          </button>
         </div>
 
         <div class="filter-bar">
           <input type="text" id="apptSearch" placeholder="Search title or name…" style="flex:1;min-width:160px" />
           <input type="date" id="apptDateFrom" title="From date" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem" />
           <input type="date" id="apptDateTo" title="To date" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem" />
+          <select id="apptFilterCategory">
+            <option value="">All categories</option>
+          </select>
           <select id="apptFilterResource">
             <option value="">All resources</option>
           </select>
@@ -526,13 +553,13 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
             <table>
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Title</th>
+                  <th class="sortable" onclick="sortAppt('id')">#<span class="sort-icon" data-col="id"></span></th>
+                  <th class="sortable" onclick="sortAppt('title')">Title<span class="sort-icon" data-col="title"></span></th>
                   <th>Resource</th>
-                  <th>Start</th>
-                  <th>End</th>
+                  <th class="sortable" onclick="sortAppt('start_time')">Start<span class="sort-icon" data-col="start_time"></span></th>
+                  <th class="sortable" onclick="sortAppt('end_time')">End<span class="sort-icon" data-col="end_time"></span></th>
                   <th>Booked By</th>
-                  <th>Status</th>
+                  <th class="sortable" onclick="sortAppt('status')">Status<span class="sort-icon" data-col="status"></span></th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1092,10 +1119,16 @@ let token      = localStorage.getItem('bt-admin-token') || '';
 let resources  = [];
 let categories = [];
 // appointments table state
-let apptPage  = 1;
-let apptLimit = 25;
+let apptPage    = 1;
+let apptLimit   = 25;
+let apptSortBy  = 'start_time';
+let apptSortDir = 'desc';
 // users table state
 let usersSearch = '';
+// dashboard auto-refresh state
+let dashRefreshTimer = null;
+let dashLabelTimer   = null;
+let dashRefreshedAt  = null;
 
 const COLORS = [
   // Reds / Oranges / Yellows
@@ -1227,7 +1260,7 @@ function showPage(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name)?.classList.add('active');
   document.querySelector(`.nav-item[data-page="${name}"]`)?.classList.add('active');
-  if (name === 'dashboard')    { loadDashboardStats(); }
+  if (name === 'dashboard')    { loadDashboardStats(); startDashRefresh(); } else { stopDashRefresh(); }
   if (name === 'appointments') { apptPage = 1; loadAppointments(); }
   if (name === 'activitylog')  { actLogPage = 1; loadActivityLog(); }
   if (name === 'users')        { usersPage  = 1; loadUsers(); }
@@ -1243,12 +1276,14 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // ════════════════════════════════════════════════════════
 async function loadAll() {
   await Promise.all([loadCategories(), loadResources(), loadAppointments(), loadDashboardStats()]);
+  startDashRefresh();
 }
 
 async function loadCategories() {
   categories = await api('/categories');
   renderCategoryTable();
   populateCategoryDropdown();
+  renderCategoryFilter();
 }
 
 async function loadResources() {
@@ -1265,15 +1300,18 @@ async function loadAppointments(page) {
   const date_from = document.getElementById('apptDateFrom')?.value         || '';
   const date_to   = document.getElementById('apptDateTo')?.value           || '';
 
-  const qs = new URLSearchParams({ page: apptPage, limit: apptLimit, status: st });
+  const catId     = document.getElementById('apptFilterCategory')?.value  || '';
+  const qs = new URLSearchParams({ page: apptPage, limit: apptLimit, status: st, sort_by: apptSortBy, sort_dir: apptSortDir });
   if (search)    qs.set('search',      search);
   if (rid)       qs.set('resource_id', rid);
+  else if (catId) qs.set('category_id', catId);
   if (date_from) qs.set('date_from',   date_from);
   if (date_to)   qs.set('date_to',     date_to);
 
   try {
     const res = await api(`/appointments?${qs}`);
     renderApptTable(res);
+    updateApptSortHeaders();
   } catch (err) {
     toast(err.message || 'Failed to load appointments', 'error');
   }
@@ -1283,12 +1321,40 @@ async function loadAppointments(page) {
 // Dashboard
 // ════════════════════════════════════════════════════════
 async function loadDashboardStats() {
+  const btn = document.getElementById('dashRefreshBtn');
+  if (btn) { btn.disabled = true; }
   try {
     const stats = await api('/admin/stats');
+    dashRefreshedAt = Date.now();
+    updateDashLabel();
     renderDashboard(stats);
   } catch (err) {
     console.error('Failed to load dashboard stats:', err);
+  } finally {
+    if (btn) { btn.disabled = false; }
   }
+}
+
+function startDashRefresh() {
+  stopDashRefresh();
+  dashRefreshTimer = setInterval(() => loadDashboardStats(), 60000);
+  dashLabelTimer   = setInterval(() => updateDashLabel(),    15000);
+}
+
+function stopDashRefresh() {
+  clearInterval(dashRefreshTimer);
+  clearInterval(dashLabelTimer);
+  dashRefreshTimer = null;
+  dashLabelTimer   = null;
+}
+
+function updateDashLabel() {
+  const el = document.getElementById('dashRefreshLabel');
+  if (!el || !dashRefreshedAt) return;
+  const secs = Math.round((Date.now() - dashRefreshedAt) / 1000);
+  el.textContent = secs < 60
+    ? `Updated ${secs}s ago · auto-refreshes every 60s`
+    : `Updated ${Math.round(secs / 60)}m ago · auto-refreshes every 60s`;
 }
 
 function renderDashboard(stats) {
@@ -1386,13 +1452,30 @@ function renderWeeklyChart(days) {
 // ════════════════════════════════════════════════════════
 // Appointments table
 // ════════════════════════════════════════════════════════
-function renderResourceFilter() {
+function renderResourceFilter(filterCatId = '') {
   const sel = document.getElementById('apptFilterResource');
+  const cur = sel.value;  // preserve current selection if still valid
   sel.innerHTML = '<option value="">All resources</option>';
-  resources.forEach(r => {
+  resources
+    .filter(r => !filterCatId || String(r.category_id) === String(filterCatId))
+    .forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.name;
+      sel.appendChild(opt);
+    });
+  // Restore selection only if still present after filter
+  if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+function renderCategoryFilter() {
+  const sel = document.getElementById('apptFilterCategory');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">All categories</option>';
+  categories.forEach(c => {
     const opt = document.createElement('option');
-    opt.value = r.id;
-    opt.textContent = r.name;
+    opt.value = c.id;
+    opt.textContent = c.name;
     sel.appendChild(opt);
   });
 }
@@ -1465,6 +1548,67 @@ function renderApptTable(res) {
 
 function gotoApptPage(p) { apptPage = p; loadAppointments(); }
 
+function sortAppt(col) {
+  if (apptSortBy === col) {
+    apptSortDir = apptSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    apptSortBy  = col;
+    apptSortDir = col === 'id' ? 'desc' : 'asc';
+  }
+  apptPage = 1;
+  loadAppointments();
+}
+
+function updateApptSortHeaders() {
+  document.querySelectorAll('#page-appointments th.sortable').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if (!icon) return;
+    const col = icon.dataset.col;
+    th.classList.toggle('sort-active', col === apptSortBy);
+    icon.textContent = col === apptSortBy ? (apptSortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  });
+}
+
+async function exportApptCSV() {
+  const search    = document.getElementById('apptSearch')?.value.trim()    || '';
+  const rid       = document.getElementById('apptFilterResource')?.value   || '';
+  const catId     = document.getElementById('apptFilterCategory')?.value   || '';
+  const st        = document.getElementById('apptFilterStatus')?.value     || 'all';
+  const date_from = document.getElementById('apptDateFrom')?.value         || '';
+  const date_to   = document.getElementById('apptDateTo')?.value           || '';
+
+  const qs = new URLSearchParams({ status: st });
+  if (search)    qs.set('search',      search);
+  if (rid)       qs.set('resource_id', rid);
+  else if (catId) qs.set('category_id', catId);
+  if (date_from) qs.set('date_from',   date_from);
+  if (date_to)   qs.set('date_to',     date_to);
+  // No page param → flat array (all matching records)
+
+  try {
+    const data = await api(`/appointments?${qs}`);
+    const esc  = v => `"${String(v || '').replace(/"/g, '""')}"`;
+    const header = ['ID','Title','Resource','Start','End','Booked By','Email','Phone','Status','Created'];
+    const rows   = data.map(a => [
+      a.id, esc(a.title), esc(a.resource_name),
+      fmtDt(a.start_time), fmtDt(a.end_time),
+      esc(a.booked_by_name), a.booked_by_email, a.booked_by_phone || '',
+      a.status, fmtDt(a.created_at),
+    ]);
+    const csv  = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `appointments-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${data.length} appointment(s)`, 'success');
+  } catch (err) {
+    toast(err.message || 'Export failed', 'error');
+  }
+}
+
 // Filters: reset to page 1 and reload from server
 let apptSearchTimer;
 document.getElementById('apptSearch')?.addEventListener('input', () => {
@@ -1474,6 +1618,14 @@ document.getElementById('apptSearch')?.addEventListener('input', () => {
 ['apptFilterResource','apptFilterStatus','apptDateFrom','apptDateTo'].forEach(id =>
   document.getElementById(id)?.addEventListener('input', () => { apptPage = 1; loadAppointments(); })
 );
+// Category cascades into resource dropdown then reloads
+document.getElementById('apptFilterCategory')?.addEventListener('input', () => {
+  const catId = document.getElementById('apptFilterCategory').value;
+  renderResourceFilter(catId);
+  document.getElementById('apptFilterResource').value = '';
+  apptPage = 1;
+  loadAppointments();
+});
 document.getElementById('apptLimit')?.addEventListener('change', e => {
   apptLimit = parseInt(e.target.value);
   apptPage  = 1;

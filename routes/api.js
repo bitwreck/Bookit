@@ -333,9 +333,9 @@ router.post('/auth/login', ah(async (req, res) => {
       return res.status(401).json({ error: msg });
     }
 
-    // Update name/phone from LDAP on each login
+    // Update name/phone and last_login_at from LDAP on each login
     await db.execute(
-      `UPDATE users SET name=?, phone=? WHERE email=?`,
+      `UPDATE users SET name=?, phone=?, last_login_at=NOW() WHERE email=?`,
       [ldapUser.name, ldapUser.phone, ldapUser.email]
     );
     const [[updated]] = await db.execute(
@@ -369,9 +369,9 @@ router.post('/auth/login', ah(async (req, res) => {
       }
       const tz = 'UTC';
       await db.execute(
-        `INSERT INTO users (name, email, phone, timezone, auth_source)
-         VALUES (?, ?, ?, ?, 'ldap')
-         ON DUPLICATE KEY UPDATE name=VALUES(name), phone=VALUES(phone), auth_source='ldap'`,
+        `INSERT INTO users (name, email, phone, timezone, auth_source, last_login_at)
+         VALUES (?, ?, ?, ?, 'ldap', NOW())
+         ON DUPLICATE KEY UPDATE name=VALUES(name), phone=VALUES(phone), auth_source='ldap', last_login_at=NOW()`,
         [ldapUser.name, ldapUser.email, ldapUser.phone, tz]
       );
       const [[newUser]] = await db.execute(
@@ -398,6 +398,9 @@ router.post('/auth/login', ah(async (req, res) => {
 
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
+
+  // Fire-and-forget — don't block the response
+  db.execute('UPDATE users SET last_login_at=NOW() WHERE id=?', [user.id]).catch(() => {});
 
   const token = jwt.sign(
     { type: 'user', userId: user.id, name: user.name, email: user.email,
@@ -714,7 +717,7 @@ router.delete('/resources/:id', requireAdmin, ah(async (req, res) => {
 // Appointments
 // ═══════════════════════════════════════════════════════════
 router.get('/appointments', ah(async (req, res) => {
-  const { resource_id, start, end, status, search, date_from, date_to } = req.query;
+  const { resource_id, start, end, status, search, date_from, date_to, category_id, sort_by, sort_dir } = req.query;
   // Support array of IDs for category filtering: resource_id[]=1&resource_id[]=2
   const resourceIds = req.query['resource_id[]']
     ? [].concat(req.query['resource_id[]']).map(Number).filter(Boolean)
@@ -727,6 +730,11 @@ router.get('/appointments', ah(async (req, res) => {
   const page   = Math.max(1, parseInt(req.query.page) || 1);
   const offset = (page - 1) * limit;
 
+  // Sort params (admin paginated use only; public calendar always uses start_time ASC)
+  const VALID_SORT = { id: 'a.id', title: 'a.title', start_time: 'a.start_time', end_time: 'a.end_time', status: 'a.status' };
+  const sortCol = VALID_SORT[sort_by] || 'a.start_time';
+  const sortDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
+
   // Build reusable WHERE clause + params array
   let where = ' WHERE 1=1';
   const params = [];
@@ -735,6 +743,8 @@ router.get('/appointments', ah(async (req, res) => {
     where += ` AND a.resource_id IN (${resourceIds.map(() => '?').join(',')})`;
     params.push(...resourceIds);
   } else if (resource_id) { where += ' AND a.resource_id = ?'; params.push(resource_id); }
+
+  if (category_id) { where += ' AND r.category_id = ?'; params.push(category_id); }
 
   if (start)     { where += ' AND a.end_time >= ?';          params.push(start); }
   if (end)       { where += ' AND a.start_time <= ?';        params.push(end); }
@@ -765,15 +775,49 @@ router.get('/appointments', ah(async (req, res) => {
   if (wantPagination) {
     const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total${join}${where}`, params);
     const [rows] = await db.execute(
-      `${cols}${join}${where} ORDER BY a.start_time DESC LIMIT ? OFFSET ?`,
+      `${cols}${join}${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
     return res.json({ total, page, limit, pages: Math.ceil(total / limit), data: rows.map(mapRow) });
   }
 
-  // Non-paginated path (public calendar, conflict checks, etc.)
+  // Non-paginated path (public calendar, conflict checks, etc.) — always start_time ASC
   const [rows] = await db.execute(`${cols}${join}${where} ORDER BY a.start_time ASC`, params);
   res.json(rows.map(mapRow));
+}));
+
+// My Bookings — returns the authenticated user's non-cancelled appointments.
+// Must be registered BEFORE /:id to avoid route collision.
+// GET /api/appointments/mine
+router.get('/appointments/mine', ah(async (req, res) => {
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+
+  let payload;
+  try { payload = require('jsonwebtoken').verify(token, process.env.JWT_SECRET); }
+  catch { return res.status(401).json({ error: 'Invalid or expired token' }); }
+  if (payload.type !== 'user') return res.status(403).json({ error: 'Forbidden' });
+
+  const now = new Date();
+  const [rows] = await db.execute(
+    `SELECT a.*, r.name AS resource_name, r.color AS resource_color
+     FROM appointments a
+     JOIN resources r ON r.id = a.resource_id
+     WHERE a.user_id = ? AND a.status != 'cancelled'
+     ORDER BY a.start_time ASC`,
+    [payload.id]
+  );
+
+  const mapMine = r => ({
+    ...r,
+    start_time: toISOLocal(r.start_time),
+    end_time:   toISOLocal(r.end_time),
+    created_at: toISOLocal(r.created_at),
+    updated_at: toISOLocal(r.updated_at),
+    is_past:    r.end_time < now,
+  });
+
+  res.json(rows.map(mapMine));
 }));
 
 // Real-time conflict check — must be registered BEFORE /:id to avoid route collision.
@@ -823,6 +867,18 @@ router.get('/appointments/:id', ah(async (req, res) => {
 }));
 
 router.post('/appointments', ah(async (req, res) => {
+  // Require authenticated user
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'You must be signed in to create a booking' });
+  let userPayload;
+  try {
+    userPayload = require('jsonwebtoken').verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired session — please sign in again' });
+  }
+  if (userPayload.type !== 'user') return res.status(403).json({ error: 'Forbidden' });
+
   const { resource_id, title, description, booked_by_name,
           booked_by_email, booked_by_phone, start_time, end_time, timezone } = req.body || {};
 
@@ -991,6 +1047,20 @@ router.get('/users', requireAdmin, ah(async (req, res) => {
   const offset = (page - 1) * limit;
   const search = (req.query.search || '').trim();
 
+  // Sort
+  const VALID_SORT = {
+    id:              'u.id',
+    name:            'u.name',
+    email:           'u.email',
+    auth_source:     'u.auth_source',
+    booking_count:   'booking_count',
+    last_login_at:   'u.last_login_at',
+    last_booking_at: 'last_booking_at',
+    created_at:      'u.created_at',
+  };
+  const sortCol = VALID_SORT[req.query.sort_by] || 'u.created_at';
+  const sortDir = req.query.sort_dir === 'asc' ? 'ASC' : 'DESC';
+
   let where = '';
   const baseParams = [];
   if (search) {
@@ -1004,12 +1074,13 @@ router.get('/users', requireAdmin, ah(async (req, res) => {
     baseParams
   );
   const [rows] = await db.execute(
-    `SELECT u.id, u.name, u.email, u.phone, u.auth_source, u.created_at,
-            COUNT(a.id) AS booking_count
+    `SELECT u.id, u.name, u.email, u.phone, u.auth_source, u.last_login_at, u.created_at,
+            COUNT(a.id) AS booking_count,
+            (SELECT MAX(b.created_at) FROM appointments b WHERE b.user_id = u.id) AS last_booking_at
      FROM users u
      LEFT JOIN appointments a ON a.user_id = u.id AND a.status != 'cancelled'${where}
-     GROUP BY u.id, u.name, u.email, u.phone, u.auth_source, u.created_at
-     ORDER BY u.created_at DESC
+     GROUP BY u.id, u.name, u.email, u.phone, u.auth_source, u.last_login_at, u.created_at
+     ORDER BY ${sortCol} ${sortDir}
      LIMIT ? OFFSET ?`,
     [...baseParams, limit, offset]
   );
@@ -1019,7 +1090,12 @@ router.get('/users', requireAdmin, ah(async (req, res) => {
     page,
     limit,
     pages: Math.ceil(total / limit),
-    data: rows.map(r => ({ ...r, created_at: toISOLocal(r.created_at) })),
+    data: rows.map(r => ({
+      ...r,
+      last_login_at:   toISOLocal(r.last_login_at),
+      last_booking_at: toISOLocal(r.last_booking_at),
+      created_at:      toISOLocal(r.created_at),
+    })),
   });
 }));
 
@@ -1190,13 +1266,13 @@ router.get('/admin/stats', requireAdmin, ah(async (_req, res) => {
   const now    = new Date();
   const todayS = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayE = new Date(todayS.getTime() + 86400000);
-  const weekE  = new Date(todayE.getTime() + 6 * 86400000);
   const week7ago = new Date(todayS.getTime() - 6 * 86400000);
 
   const fmt = d => d.toISOString().slice(0, 19).replace('T', ' ');
+  const nowStr = fmt(now);
 
   const [
-    [[{ total }]],
+    [[{ confirmed_past }]],
     [[{ today }]],
     [[{ upcoming }]],
     [[{ resource_count }]],
@@ -1205,14 +1281,16 @@ router.get('/admin/stats', requireAdmin, ah(async (_req, res) => {
     [weeklyRaw],
     [recent],
   ] = await Promise.all([
-    db.execute("SELECT COUNT(*) AS total FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL"),
+    // Past confirmed bookings (end_time already passed)
+    db.execute("SELECT COUNT(*) AS confirmed_past FROM appointments WHERE status = 'confirmed' AND user_id IS NOT NULL AND end_time < ?", [nowStr]),
     db.execute(
       "SELECT COUNT(*) AS today FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL AND start_time < ? AND end_time > ?",
       [fmt(todayE), fmt(todayS)]
     ),
+    // All upcoming non-cancelled (start_time in the future)
     db.execute(
-      "SELECT COUNT(*) AS upcoming FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL AND start_time >= ? AND start_time < ?",
-      [fmt(todayS), fmt(weekE)]
+      "SELECT COUNT(*) AS upcoming FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL AND start_time > ?",
+      [nowStr]
     ),
     db.execute("SELECT COUNT(*) AS resource_count FROM resources"),
     db.execute("SELECT COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60.0, 1), 0) AS total_hours FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL"),
@@ -1258,7 +1336,7 @@ router.get('/admin/stats', requireAdmin, ah(async (_req, res) => {
   }
 
   res.json({
-    total, today, upcoming,
+    confirmed_past, today, upcoming,
     resource_count,
     total_hours,
     utilization,

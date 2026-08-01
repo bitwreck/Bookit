@@ -709,15 +709,22 @@ router.put('/settings', requireAdmin, ah(async (req, res) => {
 // Activity feed
 // ═══════════════════════════════════════════════════════════
 router.get('/activity', ah(async (req, res) => {
-  const VALID_LIMITS = [5, 25, 50, 75, 100];
+  const VALID_LIMITS  = [5, 10, 15, 20, 25, 50, 75, 100];
+  const VALID_ACTIONS = ['created', 'cancelled', 'deleted'];
   const limit  = VALID_LIMITS.includes(parseInt(req.query.limit)) ? parseInt(req.query.limit) : 5;
   const page   = Math.max(1, parseInt(req.query.page) || 1);
   const offset = (page - 1) * limit;
+  const action = VALID_ACTIONS.includes(req.query.action) ? req.query.action : null;
 
-  const [[{ total }]] = await db.execute('SELECT COUNT(*) AS total FROM activity_log');
+  const where  = action ? 'WHERE action = ?' : '';
+  const wParam = action ? [action] : [];
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM activity_log ${where}`, wParam
+  );
   const [rows] = await db.execute(
-    'SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ? OFFSET ?',
-    [limit, offset]
+    `SELECT * FROM activity_log ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...wParam, limit, offset]
   );
 
   res.json({

@@ -135,6 +135,35 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: .85rem;
 }
 
+/* Activity filter pills */
+.act-pill {
+  padding: .2rem .55rem;
+  border-radius: 99px;
+  font-size: .68rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  white-space: nowrap;
+}
+.act-pill:hover  { background: var(--surface2); color: var(--text); }
+.act-pill.active { background: var(--text); color: var(--surface); border-color: var(--text); }
+.act-show-more {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: .78rem;
+  color: var(--text-muted);
+  padding: .5rem 0 .1rem;
+  text-align: center;
+  text-decoration: underline;
+  font-family: inherit;
+}
+.act-show-more:hover { color: var(--text); }
+
 /* Resource filter list */
 .resource-list { list-style: none; display: flex; flex-direction: column; gap: .35rem; }
 .resource-item {
@@ -841,8 +870,18 @@ select.form-control {
 
     <!-- Recent Activity -->
     <div class="card" id="activityCard">
-      <div class="card-title">Recent Activity</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem">
+        <div class="card-title" style="margin-bottom:0">Recent Activity</div>
+        <div style="display:flex;gap:.3rem;flex-shrink:0">
+          <button class="act-pill active" data-action="">All</button>
+          <button class="act-pill" data-action="created">Created</button>
+          <button class="act-pill" data-action="cancelled">Cancelled</button>
+        </div>
+      </div>
       <ul id="activityList" style="list-style:none;display:flex;flex-direction:column;gap:.5rem"></ul>
+      <div id="activityFooter" style="display:none">
+        <button class="act-show-more" id="activityShowMore">Show more</button>
+      </div>
     </div>
 
   </aside>
@@ -1766,12 +1805,20 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+let activityFilter = '';  // '' | 'created' | 'cancelled'
+let activityLimit  = 5;
+
 async function loadActivity() {
-  const list = document.getElementById('activityList');
+  const list   = document.getElementById('activityList');
+  const footer = document.getElementById('activityFooter');
   try {
-    const { data: events } = await apiFetch('/activity?limit=5');
+    const params = new URLSearchParams({ limit: activityLimit });
+    if (activityFilter) params.set('action', activityFilter);
+    const { data: events, total } = await apiFetch(`/activity?${params}`);
+
     if (!events.length) {
       list.innerHTML = '<li class="activity-empty">No activity yet</li>';
+      if (footer) footer.style.display = 'none';
       return;
     }
     list.innerHTML = events.map(e => `
@@ -1787,10 +1834,46 @@ async function loadActivity() {
         </div>
       </li>
     `).join('');
+
+    // Show/hide footer and label based on remaining items
+    if (footer) {
+      const btn = document.getElementById('activityShowMore');
+      if (total > activityLimit) {
+        footer.style.display = '';
+        if (btn) btn.textContent = `Show more (${total - activityLimit} more)`;
+      } else if (activityLimit > 5) {
+        footer.style.display = '';
+        if (btn) btn.textContent = 'Show less';
+      } else {
+        footer.style.display = 'none';
+      }
+    }
   } catch {
     list.innerHTML = '<li class="activity-empty">Could not load activity</li>';
+    if (footer) footer.style.display = 'none';
   }
 }
+
+// Activity filter pill clicks
+document.querySelectorAll('.act-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activityFilter = btn.dataset.action;
+    activityLimit  = 5;
+    document.querySelectorAll('.act-pill').forEach(b => b.classList.toggle('active', b === btn));
+    loadActivity();
+  });
+});
+
+// Show more / show less
+document.getElementById('activityShowMore')?.addEventListener('click', () => {
+  const btn = document.getElementById('activityShowMore');
+  if (btn?.textContent.startsWith('Show less')) {
+    activityLimit = 5;
+  } else {
+    activityLimit += 10;
+  }
+  loadActivity();
+});
 
 let activityTimer;
 function startActivityPolling() {

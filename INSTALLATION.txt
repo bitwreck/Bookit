@@ -116,7 +116,7 @@ View database logs:
   docker compose logs -f db
 
 Open a database shell:
-  docker exec -it bookit-db mariadb -u bookit -pbookitsecret booking
+  docker exec -it bookit-db mariadb -u bookit -p bookitsecret booking
 
 
 ------------------------------------------------------------
@@ -239,12 +239,12 @@ separate admin panel.
 Key concepts:
 
   Resources      Physical or virtual items that can be
-                 booked (e.g., "IMM Lab", "UCSX Blade 1").
+                 booked (e.g., "Conf-room-1", "Conf-room-2").
                  Each resource has a name, color, and
                  belongs to a category.
 
-  Categories     Logical groups for resources (e.g., "Labs",
-                 "Network Gear"). Used to filter the calendar
+  Categories     Logical groups for resources (e.g., "Rooms",
+                 "Equipment"). Used to filter the calendar
                  sidebar.
 
   Bookings       A reservation of a resource for a specific

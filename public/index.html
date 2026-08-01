@@ -790,7 +790,7 @@ select.form-control {
         </div>
 
         <div class="form-group">
-          <label for="bPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional — for SMS cancellation codes)</span></label>
+          <label for="bPhone">Phone <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
           <input class="form-control" type="tel" id="bPhone" placeholder="+1 555 000 0000" />
         </div>
 
@@ -875,38 +875,23 @@ select.form-control {
       </div>
     </div>
 
-    <!-- Cancel: Step 1 — email entry -->
-    <div id="cancelStep1" style="display:none;margin-top:1.25rem;padding:1rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-      <p id="cancelStep1Desc" style="font-size:.875rem;margin-bottom:.85rem;color:var(--text)">
-        Enter the email address used when booking. We'll send you a 6-digit cancellation code.
+    <!-- Cancel: password confirmation -->
+    <div id="cancelPanel" style="display:none;margin-top:1.25rem;padding:1rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <p style="font-size:.875rem;margin-bottom:.85rem;color:var(--text)">
+        Enter your password to confirm cancellation.
       </p>
-      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <input class="form-control" type="email" id="cancelEmail" placeholder="your@email.com"
-               style="flex:1;min-width:0" />
-        <button class="btn btn-sm" id="sendCodeBtn"
+      <div id="cancelPasswordGroup" style="margin-bottom:.6rem">
+        <input class="form-control" type="password" id="cancelPassword"
+               placeholder="Your password" autocomplete="current-password" />
+      </div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.6rem">
+        <button class="btn btn-sm" id="confirmCancelBtn"
                 style="background:#b91c1c;color:#fff;border-color:#b91c1c;white-space:nowrap">
-          Send Code
+          Confirm Cancellation
         </button>
         <button class="btn btn-outline btn-sm" id="dismissCancelBtn">Never mind</button>
       </div>
-      <span id="cancelError1" style="color:#ef4444;font-size:.8rem;margin-top:.5rem;display:none"></span>
-    </div>
-
-    <!-- Cancel: Step 2 — code entry -->
-    <div id="cancelStep2" style="display:none;margin-top:1.25rem;padding:1rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-      <p style="font-size:.875rem;margin-bottom:.85rem;color:var(--text)">
-        Enter the 6-digit code sent to your email (and phone if provided). The code expires in 15 minutes.
-      </p>
-      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <input class="form-control" type="text" id="cancelCode" placeholder="000000"
-               maxlength="6" inputmode="numeric" style="flex:1;min-width:0;letter-spacing:.2em;font-size:1.1rem" />
-        <button class="btn btn-sm" id="confirmCancelBtn"
-                style="background:#b91c1c;color:#fff;border-color:#b91c1c;white-space:nowrap">
-          Confirm Cancel
-        </button>
-        <button class="btn btn-outline btn-sm" id="backToStep1Btn">Back</button>
-      </div>
-      <span id="cancelError2" style="color:#ef4444;font-size:.8rem;margin-top:.5rem;display:none"></span>
+      <span id="cancelError" style="color:#ef4444;font-size:.8rem;margin-top:.5rem;display:none"></span>
     </div>
   </div>
 </div>
@@ -926,7 +911,7 @@ select.form-control {
     </div>
 
     <p id="loginDesc" style="font-size:.875rem;color:var(--text-muted);margin-bottom:1.25rem">
-      Enter your email address to sign in to your account.
+      Enter your email and password to sign in.
     </p>
 
     <form id="loginForm" novalidate>
@@ -935,14 +920,10 @@ select.form-control {
         <input class="form-control" type="email" id="loginEmail"
                placeholder="your@email.com" autocomplete="email" required />
       </div>
-      <!-- Shown only when LDAP is enabled -->
-      <div class="form-group" id="loginPasswordGroup" style="display:none">
-        <label for="loginPassword">
-          Password
-          <span style="font-size:.75rem;font-weight:400;color:var(--text-muted);margin-left:.3rem">LDAP users only — leave blank for local accounts</span>
-        </label>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
         <input class="form-control" type="password" id="loginPassword"
-               placeholder="Your directory password" autocomplete="current-password" />
+               placeholder="Your password" autocomplete="current-password" required />
       </div>
       <span id="loginError" style="display:none;color:#ef4444;font-size:.82rem;margin-bottom:.75rem"></span>
       <button type="submit" class="btn btn-primary" id="loginSubmitBtn" style="width:100%">
@@ -998,7 +979,7 @@ select.form-control {
       <div class="form-group">
         <label for="profPhone">
           Phone
-          <span style="font-size:.75rem;font-weight:400;color:var(--text-muted);margin-left:.3rem">optional · SMS cancellation codes</span>
+          <span style="font-size:.75rem;font-weight:400;color:var(--text-muted);margin-left:.3rem">optional</span>
         </label>
         <input class="form-control" type="tel" id="profPhone" placeholder="+1 555 000 0000" />
       </div>
@@ -1037,14 +1018,13 @@ select.form-control {
 // Config & State
 // ════════════════════════════════════════════════════════
 const API = '/api';
-let resources         = [];
-let appointments      = [];
+let resources     = [];
+let appointments  = [];
 let calendar;
-let activeFilter      = null;  // null = all; number = resource id; 'cat-N' = category
-let collapsedCats     = new Set(); // category IDs the user has collapsed
-let currentTz         = Intl.DateTimeFormat().resolvedOptions().timeZone;
-let requireCancelCode = true;  // default on; overridden by settings fetch
-let ldapEnabled       = false; // overridden by settings fetch
+let activeFilter  = null;  // null = all; number = resource id; 'cat-N' = category
+let collapsedCats = new Set(); // category IDs the user has collapsed
+let currentTz     = Intl.DateTimeFormat().resolvedOptions().timeZone;
+let ldapEnabled   = false; // overridden by settings fetch
 
 // ── Theme ────────────────────────────────────────────────
 const html       = document.documentElement;
@@ -1873,112 +1853,47 @@ function showEventDetail(appt) {
   document.getElementById('detailIcsLink').href     = `/api/appointments/${appt.id}/ics`;
   document.getElementById('detailIcsLink').download = `booking-${appt.id}.ics`;
 
-  // Reset cancel UI
+  // Cancel button: only for the booking owner who is signed in
   const cancelBtn = document.getElementById('cancelBookingBtn');
-  cancelBtn.style.display = cancelled ? 'none' : '';
+  const isOwner   = userSession && userSession.email?.toLowerCase() === appt.booked_by_email?.toLowerCase();
+  cancelBtn.style.display = (!cancelled && isOwner) ? '' : 'none';
   resetCancelFlow();
 
   eventModal.classList.add('open');
 }
 
 function resetCancelFlow() {
-  document.getElementById('cancelStep1').style.display  = 'none';
-  document.getElementById('cancelStep2').style.display  = 'none';
-  const emailEl = document.getElementById('cancelEmail');
-  emailEl.value    = '';
-  emailEl.readOnly = false;
-  emailEl.style.opacity = '';
-  emailEl.style.cursor  = '';
-  document.getElementById('cancelCode').value           = '';
-  document.getElementById('cancelError1').style.display = 'none';
-  document.getElementById('cancelError2').style.display = 'none';
-  document.getElementById('cancelBookingBtn').style.display = '';
+  document.getElementById('cancelPanel').style.display       = 'none';
+  document.getElementById('cancelPassword').value            = '';
+  document.getElementById('cancelError').style.display       = 'none';
+  // Restore cancel button visibility based on current appt
+  document.getElementById('cancelBookingBtn').style.display  = '';
 }
 
-// ── Cancel flow — Step 1: enter email, request code ──────
+// ── Cancel flow — show password panel ────────────────────
 document.getElementById('cancelBookingBtn').addEventListener('click', () => {
-  const emailEl = document.getElementById('cancelEmail');
+  document.getElementById('cancelPanel').style.display       = '';
+  document.getElementById('cancelBookingBtn').style.display  = 'none';
+  document.getElementById('cancelPassword').value            = '';
+  document.getElementById('cancelError').style.display       = 'none';
 
-  if (userSession) {
-    // Pre-fill and lock the field — only the booking owner can cancel
-    emailEl.value    = userSession.email;
-    emailEl.readOnly = true;
-    emailEl.style.opacity = '0.7';
-    emailEl.style.cursor  = 'default';
-    document.getElementById('cancelStep1Desc').textContent = requireCancelCode
-      ? `We'll send a 6-digit cancellation code to ${userSession.email}.`
-      : `Confirm cancellation for ${userSession.email}.`;
-  } else {
-    emailEl.value    = '';
-    emailEl.readOnly = false;
-    emailEl.style.opacity = '';
-    emailEl.style.cursor  = '';
-    document.getElementById('cancelStep1Desc').textContent = requireCancelCode
-      ? 'Enter the email address used when booking. We\'ll send you a 6-digit cancellation code.'
-      : 'Enter the email address used when booking to confirm cancellation.';
-  }
-
-  document.getElementById('sendCodeBtn').textContent = requireCancelCode ? 'Send Code' : 'Cancel Booking';
-  document.getElementById('cancelStep1').style.display      = '';
-  document.getElementById('cancelBookingBtn').style.display = 'none';
-  if (!userSession) emailEl.focus();
+  // LDAP users don't need a password — hide the field
+  const isLdap = userSession?.authSource === 'ldap';
+  document.getElementById('cancelPasswordGroup').style.display = isLdap ? 'none' : '';
+  if (!isLdap) document.getElementById('cancelPassword').focus();
 });
 
 document.getElementById('dismissCancelBtn').addEventListener('click', resetCancelFlow);
 
-document.getElementById('sendCodeBtn').addEventListener('click', async () => {
-  const email = document.getElementById('cancelEmail').value.trim();
-  const errEl = document.getElementById('cancelError1');
-  const btn   = document.getElementById('sendCodeBtn');
-
-  errEl.style.display = 'none';
-  if (!email) { errEl.textContent = 'Please enter your email.'; errEl.style.display = ''; return; }
-
-  btn.disabled    = true;
-  btn.textContent = requireCancelCode ? 'Sending…' : 'Cancelling…';
-
-  try {
-    const result = await apiFetch(`/appointments/${currentApptId}/request-cancel`, {
-      method: 'POST',
-      body:   JSON.stringify({ email }),
-    });
-
-    if (result.direct) {
-      // Code verification is off — booking was cancelled directly
-      eventModal.classList.remove('open');
-      if (calendar) calendar.refetchEvents();
-      loadActivity();
-      showToast('Booking cancelled successfully.');
-    } else {
-      // Move to step 2 for code entry
-      document.getElementById('cancelStep1').style.display = 'none';
-      document.getElementById('cancelStep2').style.display = '';
-      document.getElementById('cancelCode').focus();
-    }
-  } catch (err) {
-    errEl.textContent   = err.message || 'Could not process request. Please try again.';
-    errEl.style.display = '';
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = requireCancelCode ? 'Send Code' : 'Cancel Booking';
-  }
-});
-
-// ── Cancel flow — Step 2: enter code, confirm ────────────
-document.getElementById('backToStep1Btn').addEventListener('click', () => {
-  document.getElementById('cancelStep2').style.display  = 'none';
-  document.getElementById('cancelStep1').style.display  = '';
-  document.getElementById('cancelError2').style.display = 'none';
-});
-
 document.getElementById('confirmCancelBtn').addEventListener('click', async () => {
-  const code  = document.getElementById('cancelCode').value.trim();
-  const errEl = document.getElementById('cancelError2');
-  const btn   = document.getElementById('confirmCancelBtn');
+  const errEl    = document.getElementById('cancelError');
+  const btn      = document.getElementById('confirmCancelBtn');
+  const password = document.getElementById('cancelPassword').value;
+  const isLdap   = userSession?.authSource === 'ldap';
 
   errEl.style.display = 'none';
-  if (!code || code.length !== 6) {
-    errEl.textContent = 'Please enter the 6-digit code.';
+  if (!isLdap && !password) {
+    errEl.textContent   = 'Please enter your password.';
     errEl.style.display = '';
     return;
   }
@@ -1987,20 +1902,22 @@ document.getElementById('confirmCancelBtn').addEventListener('click', async () =
   btn.textContent = 'Cancelling…';
 
   try {
+    const token = localStorage.getItem('bt-user-token');
     await apiFetch(`/appointments/${currentApptId}/cancel`, {
-      method: 'POST',
-      body:   JSON.stringify({ code }),
+      method:  'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body:    JSON.stringify(isLdap ? {} : { password }),
     });
     eventModal.classList.remove('open');
     if (calendar) calendar.refetchEvents();
     loadActivity();
     showToast('Booking cancelled successfully.');
   } catch (err) {
-    errEl.textContent   = err.message || 'Invalid or expired code.';
+    errEl.textContent   = err.message || 'Could not cancel booking.';
     errEl.style.display = '';
   } finally {
     btn.disabled    = false;
-    btn.textContent = 'Confirm Cancel';
+    btn.textContent = 'Confirm Cancellation';
   }
 });
 
@@ -2212,23 +2129,22 @@ loginModal.addEventListener('click', e => { if (e.target === loginModal) closeLo
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('loginEmail').value.trim();
-  const errEl = document.getElementById('loginError');
-  const btn   = document.getElementById('loginSubmitBtn');
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl    = document.getElementById('loginError');
+  const btn      = document.getElementById('loginSubmitBtn');
 
   errEl.style.display = 'none';
-  if (!email) { errEl.textContent = 'Please enter your email.'; errEl.style.display = ''; return; }
+  if (!email)    { errEl.textContent = 'Please enter your email.';    errEl.style.display = ''; return; }
+  if (!password) { errEl.textContent = 'Please enter your password.'; errEl.style.display = ''; return; }
 
   btn.disabled    = true;
   btn.textContent = 'Signing in…';
 
   try {
-    const password = document.getElementById('loginPassword').value;
-    const body     = { email };
-    if (password) body.password = password;
     const data = await apiFetch('/auth/login', {
       method: 'POST',
-      body:   JSON.stringify(body),
+      body:   JSON.stringify({ email, password }),
     });
     localStorage.setItem('bt-user-token', data.token);
     localStorage.setItem('bt-user', JSON.stringify(data.user));
@@ -2362,15 +2278,8 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
       apiFetch('/settings').catch(() => ({})),
       loadResources(),
     ]);
-    if (settings && settings.require_cancel_code !== undefined) {
-      requireCancelCode = settings.require_cancel_code;
-    }
     if (settings && settings.ldap_enabled) {
       ldapEnabled = settings.ldap_enabled === true || settings.ldap_enabled === 'true';
-      document.getElementById('loginPasswordGroup').style.display = ldapEnabled ? '' : 'none';
-      document.getElementById('loginDesc').textContent = ldapEnabled
-        ? 'LDAP users: enter your email and password. Local accounts: email only.'
-        : 'Enter your email address to sign in to your account.';
     }
     initCalendar();
   } catch (err) {

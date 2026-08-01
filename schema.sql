@@ -35,8 +35,9 @@ CREATE TABLE IF NOT EXISTS users (
   name       VARCHAR(255) NOT NULL,
   email      VARCHAR(255) NOT NULL,
   phone      VARCHAR(30)  DEFAULT NULL,
-  timezone    VARCHAR(100)              NOT NULL DEFAULT 'UTC',
-  auth_source ENUM('local','ldap')      NOT NULL DEFAULT 'local',
+  timezone      VARCHAR(100)              NOT NULL DEFAULT 'UTC',
+  auth_source   ENUM('local','ldap')      NOT NULL DEFAULT 'local',
+  password_hash VARCHAR(255)              NULL,
   created_at  TIMESTAMP                 DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_email (email)
@@ -111,8 +112,7 @@ CREATE TABLE IF NOT EXISTS settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO settings (`key`, `value`) VALUES
-  ('require_cancel_code', 'true'),
-  ('https_redirect',      'true'),
+  ('https_redirect', 'true'),
   ('ldap_enabled',        'false'),
   ('ldap_url',            ''),
   ('ldap_base_dn',        ''),

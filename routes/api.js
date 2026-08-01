@@ -1,12 +1,10 @@
 'use strict';
-const crypto     = require('crypto');
 const express    = require('express');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const ldap       = require('ldapjs');
 const db         = require('../database');
 const requireAdmin = require('../middleware/auth');
-const { sendCancellationCode } = require('../services/notifications');
 
 const router = express.Router();
 
@@ -277,12 +275,14 @@ async function ldapAuthenticate(email, password, ip = null) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// User Auth (passwordless – email only)
+// User Auth
 // ═══════════════════════════════════════════════════════════
 router.post('/auth/register', ah(async (req, res) => {
-  const { first_name, last_name, email, phone, timezone } = req.body || {};
+  const { first_name, last_name, email, phone, timezone, password } = req.body || {};
   if (!first_name?.trim() || !last_name?.trim() || !email?.trim())
     return res.status(400).json({ error: 'First name, last name, and email are required' });
+  if (!password || password.length < 8)
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
   const name  = `${first_name.trim()} ${last_name.trim()}`;
   const clean = email.trim().toLowerCase();
@@ -292,76 +292,112 @@ router.post('/auth/register', ah(async (req, res) => {
   if (existing)
     return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
 
+  const password_hash = await bcrypt.hash(password, 10);
+
   const [result] = await db.execute(
-    'INSERT INTO users (name, email, phone, timezone) VALUES (?, ?, ?, ?)',
-    [name, clean, phone?.trim() || null, tz]
+    'INSERT INTO users (name, email, phone, timezone, password_hash) VALUES (?, ?, ?, ?, ?)',
+    [name, clean, phone?.trim() || null, tz, password_hash]
   );
 
   const token = jwt.sign(
-    { type: 'user', userId: result.insertId, name, email: clean, phone: phone?.trim() || null, timezone: tz },
+    { type: 'user', userId: result.insertId, name, email: clean, phone: phone?.trim() || null, timezone: tz, authSource: 'local' },
     process.env.JWT_SECRET,
     { expiresIn: '30d' }
   );
 
-  res.status(201).json({ token, user: { id: result.insertId, name, email: clean, phone: phone?.trim() || null, timezone: tz } });
+  res.status(201).json({ token, user: { id: result.insertId, name, email: clean, phone: phone?.trim() || null, timezone: tz, authSource: 'local' } });
 }));
 
 router.post('/auth/login', ah(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required' });
+  if (!password)      return res.status(400).json({ error: 'Password is required' });
 
   const clean = email.trim().toLowerCase();
 
-  // ── LDAP path: password supplied ──────────────────────────
-  if (password) {
+  // Look up user first to determine auth source
+  const [[user]] = await db.execute(
+    'SELECT id, name, email, phone, timezone, auth_source, password_hash FROM users WHERE email = ?', [clean]
+  );
+
+  // ── LDAP path ─────────────────────────────────────────────
+  if (user?.auth_source === 'ldap') {
     const ip = getClientIP(req);
     let ldapUser;
     try {
       ldapUser = await ldapAuthenticate(clean, password, ip);
     } catch (err) {
-      // logLdapEvent already called inside ldapAuthenticate; just sanitize for client
       const msg = err.message?.includes('Invalid Credentials') || err.message?.includes('bind')
         ? 'Invalid email or password.'
         : (err.message || 'LDAP authentication failed.');
       return res.status(401).json({ error: msg });
     }
 
-    // Upsert the LDAP user — create on first login, update name/phone on subsequent logins
-    const tz = 'UTC';
+    // Update name/phone from LDAP on each login
     await db.execute(
-      `INSERT INTO users (name, email, phone, timezone, auth_source)
-       VALUES (?, ?, ?, ?, 'ldap')
-       ON DUPLICATE KEY UPDATE name=VALUES(name), phone=VALUES(phone), auth_source='ldap'`,
-      [ldapUser.name, ldapUser.email, ldapUser.phone, tz]
+      `UPDATE users SET name=?, phone=? WHERE email=?`,
+      [ldapUser.name, ldapUser.phone, ldapUser.email]
     );
-
-    const [[user]] = await db.execute(
+    const [[updated]] = await db.execute(
       'SELECT id, name, email, phone, timezone FROM users WHERE email = ?', [ldapUser.email]
     );
 
     const token = jwt.sign(
-      { type: 'user', userId: user.id, name: user.name, email: user.email,
-        phone: user.phone || null, timezone: user.timezone || 'UTC', authSource: 'ldap' },
+      { type: 'user', userId: updated.id, name: updated.name, email: updated.email,
+        phone: updated.phone || null, timezone: updated.timezone || 'UTC', authSource: 'ldap' },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
     return res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email,
-              phone: user.phone || null, timezone: user.timezone || 'UTC', authSource: 'ldap' },
+      user: { id: updated.id, name: updated.name, email: updated.email,
+              phone: updated.phone || null, timezone: updated.timezone || 'UTC', authSource: 'ldap' },
     });
   }
 
-  // ── Local path: email-only (passwordless) ─────────────────
-  const [[user]] = await db.execute(
-    'SELECT id, name, email, phone, timezone, auth_source FROM users WHERE email = ?', [clean]
-  );
-  if (!user)
+  // ── LDAP path: user not in DB yet (first LDAP login) ──────
+  if (!user) {
+    // Try LDAP — if LDAP is enabled and user is not in DB, attempt LDAP auth
+    const ldapEnabled = await getSetting('ldap_enabled', 'false');
+    if (ldapEnabled === 'true') {
+      const ip = getClientIP(req);
+      let ldapUser;
+      try {
+        ldapUser = await ldapAuthenticate(clean, password, ip);
+      } catch {
+        return res.status(401).json({ error: 'No account found with this email. Please register first.' });
+      }
+      const tz = 'UTC';
+      await db.execute(
+        `INSERT INTO users (name, email, phone, timezone, auth_source)
+         VALUES (?, ?, ?, ?, 'ldap')
+         ON DUPLICATE KEY UPDATE name=VALUES(name), phone=VALUES(phone), auth_source='ldap'`,
+        [ldapUser.name, ldapUser.email, ldapUser.phone, tz]
+      );
+      const [[newUser]] = await db.execute(
+        'SELECT id, name, email, phone, timezone FROM users WHERE email = ?', [ldapUser.email]
+      );
+      const token = jwt.sign(
+        { type: 'user', userId: newUser.id, name: newUser.name, email: newUser.email,
+          phone: newUser.phone || null, timezone: newUser.timezone || 'UTC', authSource: 'ldap' },
+        process.env.JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+      return res.json({
+        token,
+        user: { id: newUser.id, name: newUser.name, email: newUser.email,
+                phone: newUser.phone || null, timezone: newUser.timezone || 'UTC', authSource: 'ldap' },
+      });
+    }
     return res.status(404).json({ error: 'No account found with this email. Please register first.' });
+  }
 
-  // Prevent LDAP users from bypassing password check
-  if (user.auth_source === 'ldap')
-    return res.status(401).json({ error: 'This account uses LDAP login. Please enter your password.' });
+  // ── Local path: verify password ───────────────────────────
+  if (!user.password_hash)
+    return res.status(401).json({ error: 'This account has no password set. Please contact an administrator.' });
+
+  const ok = await bcrypt.compare(password, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
 
   const token = jwt.sign(
     { type: 'user', userId: user.id, name: user.name, email: user.email,
@@ -467,11 +503,9 @@ async function getSetting(key, defaultValue = null) {
 
 /** Public: minimal settings needed by the public frontend. */
 router.get('/settings', ah(async (_req, res) => {
-  const requireCancelCode = await getSetting('require_cancel_code', 'true');
-  const ldapEnabled       = await getSetting('ldap_enabled', 'false');
+  const ldapEnabled = await getSetting('ldap_enabled', 'false');
   res.json({
-    require_cancel_code: requireCancelCode === 'true',
-    ldap_enabled:        ldapEnabled === 'true',
+    ldap_enabled: ldapEnabled === 'true',
   });
 }));
 
@@ -481,7 +515,6 @@ router.get('/admin/settings', requireAdmin, ah(async (_req, res) => {
   const s = {};
   rows.forEach(r => { s[r.key] = r.value; });
   res.json({
-    require_cancel_code: s.require_cancel_code === 'true',
     https_redirect:      s.https_redirect !== 'false',   // default true
     ldap_enabled:        s.ldap_enabled === 'true',
     ldap_url:            s.ldap_url          || '',
@@ -503,7 +536,6 @@ router.get('/admin/settings', requireAdmin, ah(async (_req, res) => {
 /** Admin: update settings. */
 router.put('/settings', requireAdmin, ah(async (req, res) => {
   const {
-    require_cancel_code,
     ldap_enabled, ldap_url, ldap_base_dn, ldap_bind_dn, ldap_bind_pass,
     ldap_user_filter, ldap_name_attr, ldap_email_attr, ldap_phone_attr,
   } = req.body || {};
@@ -512,9 +544,6 @@ router.put('/settings', requireAdmin, ah(async (req, res) => {
     'INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
     [key, value]
   );
-
-  if (require_cancel_code !== undefined)
-    await upsert('require_cancel_code', require_cancel_code ? 'true' : 'false');
 
   const { https_redirect } = req.body || {};
   if (https_redirect !== undefined)
@@ -879,66 +908,20 @@ router.delete('/appointments/:id', requireAdmin, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ── Step 1: Request a cancellation code ───────────────────
-router.post('/appointments/:id/request-cancel', ah(async (req, res) => {
-  const { email } = req.body || {};
-  if (!email) return res.status(400).json({ error: 'Email is required' });
+// ── Cancel booking (requires auth + password for local users) ─
+router.post('/appointments/:id/cancel', ah(async (req, res) => {
+  // Verify JWT
+  const auth = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!auth) return res.status(401).json({ error: 'Sign in to cancel a booking' });
 
-  const [rows] = await db.execute(
-    `SELECT a.*, r.name AS resource_name, r.color AS resource_color
-     FROM appointments a JOIN resources r ON r.id = a.resource_id WHERE a.id = ?`,
-    [req.params.id]
-  );
-  const appt = rows[0];
-  if (!appt) return res.status(404).json({ error: 'Booking not found' });
-  if (appt.status === 'cancelled')
-    return res.status(409).json({ error: 'Booking is already cancelled' });
-  if (appt.booked_by_email.toLowerCase() !== email.trim().toLowerCase())
-    return res.status(403).json({ error: 'Email does not match the booking' });
-
-  // Check whether code verification is required
-  const requireCode = (await getSetting('require_cancel_code', 'true')) === 'true';
-
-  if (!requireCode) {
-    // Direct cancel — no code needed, email match was enough
-    const [rr] = await db.execute(
-      'SELECT name AS resource_name, color AS resource_color FROM resources WHERE id = ?',
-      [appt.resource_id]
-    );
-    await db.execute("UPDATE appointments SET status = 'cancelled' WHERE id = ?", [req.params.id]);
-    await logActivity('cancelled', { title: appt.title, ...rr[0] }, email, getClientIP(req));
-    return res.json({ ok: true, direct: true });
+  let decoded;
+  try {
+    decoded = jwt.verify(auth, process.env.JWT_SECRET);
+    if (decoded.type !== 'user') throw new Error('wrong type');
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired session' });
   }
 
-  // Generate a 6-digit numeric code
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min from now
-
-  // Invalidate any previous unused codes for this appointment
-  await db.execute(
-    'UPDATE cancellation_codes SET used = 1 WHERE appointment_id = ? AND used = 0',
-    [req.params.id]
-  );
-
-  // Store new code
-  await db.execute(
-    `INSERT INTO cancellation_codes (appointment_id, code_hash, expires_at)
-     VALUES (?, ?, ?)`,
-    [req.params.id, codeHash, expiresAt.toISOString().replace('T', ' ').substring(0, 19)]
-  );
-
-  // Send code via email (and SMS if phone is on the booking)
-  await sendCancellationCode(appt, code);
-
-  res.json({ ok: true, message: 'Cancellation code sent' });
-}));
-
-// ── Step 2: Confirm cancellation with the code ─────────────
-router.post('/appointments/:id/cancel', ah(async (req, res) => {
-  const { code } = req.body || {};
-  if (!code) return res.status(400).json({ error: 'Cancellation code is required' });
-
   const [rows] = await db.execute(
     `SELECT a.*, r.name AS resource_name, r.color AS resource_color
      FROM appointments a JOIN resources r ON r.id = a.resource_id WHERE a.id = ?`,
@@ -949,21 +932,28 @@ router.post('/appointments/:id/cancel', ah(async (req, res) => {
   if (appt.status === 'cancelled')
     return res.status(409).json({ error: 'Booking is already cancelled' });
 
-  const codeHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
+  // Verify ownership
+  if (appt.booked_by_email.toLowerCase() !== decoded.email.toLowerCase())
+    return res.status(403).json({ error: 'You can only cancel your own bookings' });
 
-  const [codeRows] = await db.execute(
-    `SELECT * FROM cancellation_codes
-     WHERE appointment_id = ? AND code_hash = ? AND used = 0 AND expires_at > NOW()
-     ORDER BY created_at DESC LIMIT 1`,
-    [req.params.id, codeHash]
+  // Local users must supply their password
+  const [[user]] = await db.execute(
+    'SELECT auth_source, password_hash FROM users WHERE id = ?', [decoded.userId]
   );
-  if (!codeRows[0])
-    return res.status(400).json({ error: 'Invalid or expired cancellation code' });
 
-  // Mark code used and cancel appointment
-  await db.execute('UPDATE cancellation_codes SET used = 1 WHERE id = ?', [codeRows[0].id]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (user.auth_source !== 'ldap') {
+    const { password } = req.body || {};
+    if (!password) return res.status(400).json({ error: 'Password is required to cancel' });
+    if (!user.password_hash)
+      return res.status(401).json({ error: 'Account has no password set. Contact an administrator.' });
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Incorrect password' });
+  }
+
   await db.execute("UPDATE appointments SET status = 'cancelled' WHERE id = ?", [req.params.id]);
-  await logActivity('cancelled', appt, appt.booked_by_email, getClientIP(req));
+  await logActivity('cancelled', appt, decoded.email, getClientIP(req));
   res.json({ ok: true });
 }));
 

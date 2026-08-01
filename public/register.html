@@ -217,11 +217,23 @@ label { font-size: .82rem; font-weight: 600; color: var(--text-muted); }
     <div class="form-group">
       <label for="regPhone">
         Phone
-        <span class="optional-tag">optional · used for SMS cancellation codes</span>
+        <span class="optional-tag">optional</span>
       </label>
       <input class="form-control" type="tel" id="regPhone"
              placeholder="+1 555 000 0000" autocomplete="tel" />
-      <div class="phone-hint">Include country code for SMS (e.g. +1 for US/Canada)</div>
+      <div class="phone-hint">Include country code (e.g. +1 for US/Canada)</div>
+    </div>
+
+    <div class="form-group">
+      <label for="regPassword">Password *</label>
+      <input class="form-control" type="password" id="regPassword"
+             placeholder="At least 8 characters" autocomplete="new-password" required />
+    </div>
+
+    <div class="form-group">
+      <label for="regPasswordConfirm">Confirm Password *</label>
+      <input class="form-control" type="password" id="regPasswordConfirm"
+             placeholder="Repeat your password" autocomplete="new-password" required />
     </div>
 
     <button type="submit" class="btn btn-primary" id="submitBtn">
@@ -285,11 +297,17 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
   const last_name  = document.getElementById('lastName').value.trim();
   const email      = document.getElementById('regEmail').value.trim();
   const phone      = document.getElementById('regPhone').value.trim();
+  const password   = document.getElementById('regPassword').value;
+  const passwordConfirm = document.getElementById('regPasswordConfirm').value;
 
   if (!first_name) return showError('First name is required.');
   if (!last_name)  return showError('Last name is required.');
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return showError('A valid email address is required.');
+  if (!password || password.length < 8)
+    return showError('Password must be at least 8 characters.');
+  if (password !== passwordConfirm)
+    return showError('Passwords do not match.');
 
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
@@ -299,7 +317,7 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
     const res = await fetch(API + '/auth/register', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ first_name, last_name, email, phone: phone || undefined, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      body:    JSON.stringify({ first_name, last_name, email, phone: phone || undefined, password, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
     });
 
     const ct   = res.headers.get('content-type') || '';

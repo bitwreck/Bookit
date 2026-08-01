@@ -38,8 +38,16 @@ Key settings:
   JWT_SECRET       Required. Generate one with:
                    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
-  PORT             Change if port 3000 is already in use on your server.
-                   Uncomment and set to any available port (e.g. PORT=3001).
+  PORT             The host port for HTTP traffic. Default: 9000.
+                   Uncomment and change if that port is already in use.
+                   Example: PORT=8080
+
+  HTTPS_PORT       The host port for HTTPS traffic. Default: 9443.
+                   Uncomment and change if needed.
+                   Example: HTTPS_PORT=8443
+                   IMPORTANT: this value controls both the port Docker
+                   exposes AND the port the app listens on inside the
+                   container. They must match — see the HTTPS section below.
 
   DB_ROOT_PASSWORD Change if you want a stronger MariaDB root password.
                    The app uses a separate internal account, but it's good
@@ -72,8 +80,12 @@ Step 5 – Verify it is running
 docker compose logs -f app
 
 The app will be available at:
-  http://your-server-ip:3000        (public calendar)
-  http://your-server-ip:3000/admin.html  (admin panel)
+  http://your-server-ip:9000             (public calendar)
+  http://your-server-ip:9000/admin.html  (admin panel)
+
+If HTTPS is configured (see HTTPS section below):
+  https://your-server-ip:9443
+  https://your-server-ip:9443/admin.html
 
 
 ------------------------------------------------------------
@@ -105,6 +117,80 @@ View database logs:
 
 Open a database shell:
   docker exec -it bookit-db mariadb -u bookit -pbookitsecret booking
+
+
+------------------------------------------------------------
+Optional – Enable HTTPS (built-in TLS)
+------------------------------------------------------------
+
+BookIt can serve HTTPS directly without a reverse proxy.
+
+Step 1 – Generate a self-signed certificate
+
+  mkdir -p certs
+
+  openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
+    -keyout certs/key.pem \
+    -out    certs/cert.pem \
+    -subj "/CN=your-server-ip-or-hostname"
+
+  Set the correct permissions so the container can read the files:
+
+  chmod 644 certs/cert.pem certs/key.pem
+
+Step 2 – Enable SSL in .env.docker
+
+  Uncomment (or add) these lines:
+
+  HTTPS_PORT=9443
+  SSL_CERT=/app/certs/cert.pem
+  SSL_KEY=/app/certs/key.pem
+
+Step 3 – Restart
+
+  docker compose --env-file .env.docker up -d
+
+  The app will now be available at:
+    https://your-server-ip:9443
+    https://your-server-ip:9443/admin.html
+
+  HTTP on port 9000 will redirect to HTTPS by default.
+  This can be toggled in Admin → Settings → HTTPS & Security.
+
+Changing the HTTPS port
+
+  If port 9443 conflicts with another service, change it in
+  .env.docker — one line controls both the host port and the
+  internal listening port:
+
+    HTTPS_PORT=8443
+
+  Do NOT change the port mapping in docker-compose.yml separately.
+  Both sides of the mapping (host:container) use HTTPS_PORT so
+  they stay in sync automatically.
+
+Using a CA-signed certificate
+
+  Replace the self-signed files with your CA-issued ones:
+
+    cert.pem  = your certificate (include intermediate chain if
+                required by your CA, server cert first)
+    key.pem   = your private key
+
+  chmod 644 certs/cert.pem certs/key.pem
+  docker compose --env-file .env.docker up -d
+
+Troubleshooting
+
+  No response on the HTTPS port:
+    docker logs bookit-app
+    - "running at https://..." → certs loaded, check firewall
+    - "running at http://..."  → certs not found or unreadable
+      Verify: ls -la certs/    and    chmod 644 certs/*.pem
+
+  Permission denied error in logs:
+    chmod 644 certs/cert.pem certs/key.pem
+    docker compose --env-file .env.docker up -d
 
 
 ------------------------------------------------------------

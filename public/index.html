@@ -1261,6 +1261,7 @@ let collapsedCats = new Set(); // category IDs the user has collapsed
 let currentTz     = Intl.DateTimeFormat().resolvedOptions().timeZone;
 let ldapEnabled   = false; // overridden by settings fetch
 let smtpEnabled   = false; // overridden by features fetch
+let pendingSlot   = null;  // { start, end } saved when unauthenticated user clicks a slot
 
 // ── Theme ────────────────────────────────────────────────
 const html       = document.documentElement;
@@ -1899,6 +1900,7 @@ function initCalendar() {
     // Click on date → open booking form (requires login)
     select(info) {
       if (!userSession) {
+        pendingSlot = { start: info.startStr, end: info.endStr };
         openLoginModal();
         calendar.unselect();
         return;
@@ -2450,7 +2452,7 @@ function openLoginModal() {
   loginModal.classList.add('open');
   setTimeout(() => document.getElementById('loginEmail').focus(), 50);
 }
-function closeLoginModal() { loginModal.classList.remove('open'); }
+function closeLoginModal() { loginModal.classList.remove('open'); pendingSlot = null; }
 
 document.getElementById('signInBtn').addEventListener('click', openLoginModal);
 document.getElementById('closeLoginBtn').addEventListener('click', closeLoginModal);
@@ -2482,6 +2484,12 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     applyUserTimezone(data.user.timezone);
     closeLoginModal();
     showToast(`Welcome back, ${data.user.name.split(' ')[0]}!`);
+    // Restore the calendar slot the user clicked before being prompted to sign in
+    if (pendingSlot) {
+      const slot = pendingSlot;
+      pendingSlot = null;
+      openBookingModal(slot.start, slot.end);
+    }
   } catch (err) {
     if (err.message.includes('No account found')) {
       errEl.innerHTML = `No account found. <a href="/register.html" style="color:inherit;font-weight:700">Create one →</a>`;

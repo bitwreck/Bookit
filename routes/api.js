@@ -1080,6 +1080,16 @@ router.post('/appointments/:id/cancel', ah(async (req, res) => {
 
   await db.execute("UPDATE appointments SET status = 'cancelled' WHERE id = ?", [req.params.id]);
   await logActivity('cancelled', appt, decoded.email, getClientIP(req));
+
+  // Send cancellation confirmation (fire-and-forget, only if SMTP configured)
+  if (process.env.SMTP_HOST) {
+    notifications.sendCancellationConfirmation({
+      ...appt,
+      start_time: toISOLocal(appt.start_time),
+      end_time:   toISOLocal(appt.end_time),
+    }).catch(err => console.error('[notifications] cancellation email failed:', err.message));
+  }
+
   res.json({ ok: true });
 }));
 

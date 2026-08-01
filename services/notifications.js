@@ -141,4 +141,42 @@ async function sendBookingConfirmation(appt) {
   return sendEmail({ to: appt.booked_by_email, subject, text, html });
 }
 
-module.exports = { sendEmail, sendSMS, sendCancellationCode, sendBookingConfirmation };
+// ── Cancellation confirmation ────────────────────────────────
+async function sendCancellationConfirmation(appt) {
+  if (!process.env.SMTP_HOST) return false;
+
+  const fmt = iso => new Date(iso).toLocaleString('en-US', {
+    timeZone: appt.timezone || 'UTC',
+    weekday: 'short', month: 'short', day: 'numeric',
+    year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+
+  const subject = `Booking cancelled: ${appt.title}`;
+  const text =
+    `Hi ${appt.booked_by_name},\n\n` +
+    `Your booking has been cancelled.\n\n` +
+    `Resource: ${appt.resource_name}\n` +
+    `Start:    ${fmt(appt.start_time)}\n` +
+    `End:      ${fmt(appt.end_time)}\n\n` +
+    `If this was a mistake, please visit the booking site to make a new reservation.`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#0f172a">
+      <h2 style="color:#b91c1c">Booking Cancelled</h2>
+      <p>Hi ${appt.booked_by_name},</p>
+      <p>Your booking has been cancelled.</p>
+      <table style="width:100%;border-collapse:collapse;margin:1rem 0">
+        <tr><td style="padding:.4rem 0;color:#64748b;font-size:.85rem">Resource</td>
+            <td style="padding:.4rem 0;font-weight:600">${appt.resource_name}</td></tr>
+        <tr><td style="padding:.4rem 0;color:#64748b;font-size:.85rem">Start</td>
+            <td style="padding:.4rem 0">${fmt(appt.start_time)}</td></tr>
+        <tr><td style="padding:.4rem 0;color:#64748b;font-size:.85rem">End</td>
+            <td style="padding:.4rem 0">${fmt(appt.end_time)}</td></tr>
+      </table>
+      <p style="color:#64748b;font-size:.875rem">If this was a mistake, please visit the booking site to make a new reservation.</p>
+    </div>
+  `;
+
+  return sendEmail({ to: appt.booked_by_email, subject, text, html });
+}
+
+module.exports = { sendEmail, sendSMS, sendCancellationCode, sendBookingConfirmation, sendCancellationConfirmation };

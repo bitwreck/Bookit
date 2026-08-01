@@ -714,42 +714,66 @@ router.delete('/resources/:id', requireAdmin, ah(async (req, res) => {
 // Appointments
 // ═══════════════════════════════════════════════════════════
 router.get('/appointments', ah(async (req, res) => {
-  const { resource_id, start, end, status } = req.query;
+  const { resource_id, start, end, status, search, date_from, date_to } = req.query;
   // Support array of IDs for category filtering: resource_id[]=1&resource_id[]=2
   const resourceIds = req.query['resource_id[]']
     ? [].concat(req.query['resource_id[]']).map(Number).filter(Boolean)
     : null;
 
-  let sql = `
-    SELECT a.*, r.name AS resource_name, r.color AS resource_color
-    FROM appointments a
-    JOIN resources r ON r.id = a.resource_id
-    WHERE 1=1
-  `;
+  // Pagination is opt-in: only when ?page= is present (admin table)
+  const wantPagination = req.query.page !== undefined;
+  const VALID_LIMITS   = [25, 50, 75, 100];
+  const limit  = VALID_LIMITS.includes(parseInt(req.query.limit)) ? parseInt(req.query.limit) : 25;
+  const page   = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = (page - 1) * limit;
+
+  // Build reusable WHERE clause + params array
+  let where = ' WHERE 1=1';
   const params = [];
 
   if (resourceIds && resourceIds.length) {
-    sql += ` AND a.resource_id IN (${resourceIds.map(() => '?').join(',')})`;
+    where += ` AND a.resource_id IN (${resourceIds.map(() => '?').join(',')})`;
     params.push(...resourceIds);
-  } else if (resource_id) { sql += ' AND a.resource_id = ?'; params.push(resource_id); }
-  if (start)        { sql += ' AND a.end_time >= ?';    params.push(start); }
-  if (end)          { sql += ' AND a.start_time <= ?';  params.push(end); }
-  if (status && status !== 'all') { sql += ' AND a.status = ?'; params.push(status); }
-  else if (!status)               { sql += " AND a.status != 'cancelled'"; }
+  } else if (resource_id) { where += ' AND a.resource_id = ?'; params.push(resource_id); }
+
+  if (start)     { where += ' AND a.end_time >= ?';          params.push(start); }
+  if (end)       { where += ' AND a.start_time <= ?';        params.push(end); }
+  if (date_from) { where += ' AND a.start_time >= ?';        params.push(date_from + ' 00:00:00'); }
+  if (date_to)   { where += ' AND a.start_time <= ?';        params.push(date_to   + ' 23:59:59'); }
+
+  if (status && status !== 'all') { where += ' AND a.status = ?'; params.push(status); }
+  else if (!status)               { where += " AND a.status != 'cancelled'"; }
   // status=all → no filter (admin view)
 
-  sql += ' ORDER BY a.start_time ASC';
+  if (search) {
+    where += ' AND (a.title LIKE ? OR a.booked_by_name LIKE ? OR a.booked_by_email LIKE ?)';
+    const term = `%${search}%`;
+    params.push(term, term, term);
+  }
 
-  const [rows] = await db.execute(sql, params);
+  const join = ' FROM appointments a JOIN resources r ON r.id = a.resource_id';
+  const cols = 'SELECT a.*, r.name AS resource_name, r.color AS resource_color';
 
-  // Convert Date objects → ISO strings
-  res.json(rows.map(r => ({
+  const mapRow = r => ({
     ...r,
     start_time: toISOLocal(r.start_time),
     end_time:   toISOLocal(r.end_time),
     created_at: toISOLocal(r.created_at),
     updated_at: toISOLocal(r.updated_at),
-  })));
+  });
+
+  if (wantPagination) {
+    const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total${join}${where}`, params);
+    const [rows] = await db.execute(
+      `${cols}${join}${where} ORDER BY a.start_time DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    return res.json({ total, page, limit, pages: Math.ceil(total / limit), data: rows.map(mapRow) });
+  }
+
+  // Non-paginated path (public calendar, conflict checks, etc.)
+  const [rows] = await db.execute(`${cols}${join}${where} ORDER BY a.start_time ASC`, params);
+  res.json(rows.map(mapRow));
 }));
 
 // Real-time conflict check — must be registered BEFORE /:id to avoid route collision.
@@ -965,17 +989,29 @@ router.get('/users', requireAdmin, ah(async (req, res) => {
   const limit  = VALID_LIMITS.includes(parseInt(req.query.limit)) ? parseInt(req.query.limit) : 25;
   const page   = Math.max(1, parseInt(req.query.page) || 1);
   const offset = (page - 1) * limit;
+  const search = (req.query.search || '').trim();
 
-  const [[{ total }]] = await db.execute('SELECT COUNT(*) AS total FROM users');
+  let where = '';
+  const baseParams = [];
+  if (search) {
+    where = ' WHERE (u.name LIKE ? OR u.email LIKE ?)';
+    const term = `%${search}%`;
+    baseParams.push(term, term);
+  }
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM users u${where}`,
+    baseParams
+  );
   const [rows] = await db.execute(
     `SELECT u.id, u.name, u.email, u.phone, u.auth_source, u.created_at,
             COUNT(a.id) AS booking_count
      FROM users u
-     LEFT JOIN appointments a ON a.user_id = u.id AND a.status != 'cancelled'
-     GROUP BY u.id, u.name, u.email, u.phone, u.created_at
+     LEFT JOIN appointments a ON a.user_id = u.id AND a.status != 'cancelled'${where}
+     GROUP BY u.id, u.name, u.email, u.phone, u.auth_source, u.created_at
      ORDER BY u.created_at DESC
      LIMIT ? OFFSET ?`,
-    [limit, offset]
+    [...baseParams, limit, offset]
   );
 
   res.json({
@@ -1145,6 +1181,95 @@ router.get('/admin/ldap-log', requireAdmin, ah(async (req, res) => {
     [limit, offset]
   );
   res.json({ total, page, limit, pages: Math.min(Math.ceil(total / limit), 5), data: rows });
+}));
+
+// ═══════════════════════════════════════════════════════════
+// Admin dashboard stats
+// ═══════════════════════════════════════════════════════════
+router.get('/admin/stats', requireAdmin, ah(async (_req, res) => {
+  const now    = new Date();
+  const todayS = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayE = new Date(todayS.getTime() + 86400000);
+  const weekE  = new Date(todayE.getTime() + 6 * 86400000);
+  const week7ago = new Date(todayS.getTime() - 6 * 86400000);
+
+  const fmt = d => d.toISOString().slice(0, 19).replace('T', ' ');
+
+  const [
+    [[{ total }]],
+    [[{ today }]],
+    [[{ upcoming }]],
+    [[{ resource_count }]],
+    [[{ total_hours }]],
+    [utilization],
+    [weeklyRaw],
+    [recent],
+  ] = await Promise.all([
+    db.execute("SELECT COUNT(*) AS total FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL"),
+    db.execute(
+      "SELECT COUNT(*) AS today FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL AND start_time < ? AND end_time > ?",
+      [fmt(todayE), fmt(todayS)]
+    ),
+    db.execute(
+      "SELECT COUNT(*) AS upcoming FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL AND start_time >= ? AND start_time < ?",
+      [fmt(todayS), fmt(weekE)]
+    ),
+    db.execute("SELECT COUNT(*) AS resource_count FROM resources"),
+    db.execute("SELECT COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60.0, 1), 0) AS total_hours FROM appointments WHERE status != 'cancelled' AND user_id IS NOT NULL"),
+    db.execute(`
+      SELECT r.id, r.name, r.color,
+             COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, a.start_time, a.end_time)) / 60.0, 1), 0) AS hours
+      FROM resources r
+      LEFT JOIN appointments a ON a.resource_id = r.id AND a.status != 'cancelled' AND a.user_id IS NOT NULL
+      GROUP BY r.id, r.name, r.color
+      ORDER BY hours DESC
+    `),
+    db.execute(`
+      SELECT DATE(start_time) AS day, COUNT(*) AS count
+      FROM appointments
+      WHERE status != 'cancelled' AND user_id IS NOT NULL
+        AND start_time >= ? AND start_time < ?
+      GROUP BY DATE(start_time)
+    `, [fmt(week7ago), fmt(todayE)]),
+    db.execute(`
+      SELECT a.id, a.title, a.start_time, a.end_time, a.status, a.created_at,
+             r.name AS resource_name, r.color AS resource_color
+      FROM appointments a
+      JOIN resources r ON r.id = a.resource_id
+      WHERE a.status != 'cancelled' AND a.user_id IS NOT NULL
+      ORDER BY a.created_at DESC LIMIT 8
+    `),
+  ]);
+
+  // Fill 7-day weekly array (fill missing days with 0)
+  const weeklyMap = {};
+  weeklyRaw.forEach(r => {
+    const key = r.day instanceof Date
+      ? r.day.toISOString().slice(0, 10)
+      : String(r.day).slice(0, 10);
+    weeklyMap[key] = r.count;
+  });
+  const weekly = [];
+  for (let i = 6; i >= 0; i--) {
+    const d   = new Date(todayS.getTime() - i * 86400000);
+    const key = d.toISOString().slice(0, 10);
+    const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    weekly.push({ label, count: weeklyMap[key] || 0 });
+  }
+
+  res.json({
+    total, today, upcoming,
+    resource_count,
+    total_hours,
+    utilization,
+    weekly,
+    recent: recent.map(r => ({
+      ...r,
+      start_time: toISOLocal(r.start_time),
+      end_time:   toISOLocal(r.end_time),
+      created_at: toISOLocal(r.created_at),
+    })),
+  });
 }));
 
 // ═══════════════════════════════════════════════════════════

@@ -502,14 +502,22 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 
         <div class="filter-bar">
           <input type="text" id="apptSearch" placeholder="Search title or name…" style="flex:1;min-width:160px" />
+          <input type="date" id="apptDateFrom" title="From date" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem" />
+          <input type="date" id="apptDateTo" title="To date" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem" />
           <select id="apptFilterResource">
             <option value="">All resources</option>
           </select>
           <select id="apptFilterStatus">
-            <option value="">All statuses</option>
+            <option value="all">All statuses</option>
             <option value="confirmed">Confirmed</option>
             <option value="pending">Pending</option>
             <option value="cancelled">Cancelled</option>
+          </select>
+          <select id="apptLimit" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem">
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+            <option value="75">75 / page</option>
+            <option value="100">100 / page</option>
           </select>
         </div>
 
@@ -535,6 +543,10 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
             <div class="empty-icon">📅</div>
             <div class="empty-title">No appointments found</div>
             <p>Try adjusting your filters.</p>
+          </div>
+          <div id="apptPager" style="display:none;padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+            <span id="apptMeta" style="font-size:.82rem;color:var(--text-muted)"></span>
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap" id="apptPages"></div>
           </div>
         </div>
       </div>
@@ -657,7 +669,9 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
       <div class="page" id="page-users">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
           <h1 style="font-size:1.4rem;font-weight:800">Registered Users</h1>
-          <div style="display:flex;align-items:center;gap:.6rem">
+          <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+            <input type="text" id="userSearch" placeholder="Search name or email…"
+              class="form-control" style="width:220px;padding:.35rem .6rem;font-size:.85rem" />
             <label style="font-size:.82rem;font-weight:600;color:var(--text-muted)">Per page</label>
             <select id="usersLimit" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem">
               <option value="25" selected>25</option>
@@ -1074,10 +1088,14 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 // Auth & State
 // ════════════════════════════════════════════════════════
 const API = '/api';
-let token        = localStorage.getItem('bt-admin-token') || '';
-let resources    = [];
-let categories   = [];
-let appointments = [];
+let token      = localStorage.getItem('bt-admin-token') || '';
+let resources  = [];
+let categories = [];
+// appointments table state
+let apptPage  = 1;
+let apptLimit = 25;
+// users table state
+let usersSearch = '';
 
 const COLORS = [
   // Reds / Oranges / Yellows
@@ -1209,9 +1227,11 @@ function showPage(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name)?.classList.add('active');
   document.querySelector(`.nav-item[data-page="${name}"]`)?.classList.add('active');
-  if (name === 'activitylog') { actLogPage = 1; loadActivityLog(); }
-  if (name === 'users')       { usersPage  = 1; loadUsers(); }
-  if (name === 'settings')    { loadSettings(); }
+  if (name === 'dashboard')    { loadDashboardStats(); }
+  if (name === 'appointments') { apptPage = 1; loadAppointments(); }
+  if (name === 'activitylog')  { actLogPage = 1; loadActivityLog(); }
+  if (name === 'users')        { usersPage  = 1; loadUsers(); }
+  if (name === 'settings')     { loadSettings(); }
 }
 
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -1222,8 +1242,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // Load all data
 // ════════════════════════════════════════════════════════
 async function loadAll() {
-  await Promise.all([loadCategories(), loadResources(), loadAppointments()]);
-  renderDashboard();
+  await Promise.all([loadCategories(), loadResources(), loadAppointments(), loadDashboardStats()]);
 }
 
 async function loadCategories() {
@@ -1238,84 +1257,61 @@ async function loadResources() {
   renderResourceFilter();
 }
 
-async function loadAppointments() {
-  appointments = await api('/appointments?status=all&start=2000-01-01&end=2099-01-01');
-  renderApptTable();
+async function loadAppointments(page) {
+  if (page !== undefined) apptPage = page;
+  const search    = document.getElementById('apptSearch')?.value.trim()    || '';
+  const rid       = document.getElementById('apptFilterResource')?.value   || '';
+  const st        = document.getElementById('apptFilterStatus')?.value     || 'all';
+  const date_from = document.getElementById('apptDateFrom')?.value         || '';
+  const date_to   = document.getElementById('apptDateTo')?.value           || '';
+
+  const qs = new URLSearchParams({ page: apptPage, limit: apptLimit, status: st });
+  if (search)    qs.set('search',      search);
+  if (rid)       qs.set('resource_id', rid);
+  if (date_from) qs.set('date_from',   date_from);
+  if (date_to)   qs.set('date_to',     date_to);
+
+  try {
+    const res = await api(`/appointments?${qs}`);
+    renderApptTable(res);
+  } catch (err) {
+    toast(err.message || 'Failed to load appointments', 'error');
+  }
 }
 
 // ════════════════════════════════════════════════════════
 // Dashboard
 // ════════════════════════════════════════════════════════
-function renderDashboard() {
-  const now    = new Date();
-  const todayS = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayE = new Date(todayS.getTime() + 86400000);
-  const week   = new Date(todayE.getTime() + 6 * 86400000);
+async function loadDashboardStats() {
+  try {
+    const stats = await api('/admin/stats');
+    renderDashboard(stats);
+  } catch (err) {
+    console.error('Failed to load dashboard stats:', err);
+  }
+}
 
-  // Exclude appointments from deleted users (user_id = null) from all stats
-  const active = appointments.filter(a => a.status !== 'cancelled' && a.user_id != null);
-
-  const total    = active.length;
-  const today    = active.filter(a => {
-    const s = new Date(a.start_time), e = new Date(a.end_time);
-    return s < todayE && e > todayS;
-  }).length;
-  const upcoming = active.filter(a => {
-    const s = new Date(a.start_time);
-    return s >= todayS && s <= week;
-  }).length;
-
-  // ── Total hours ──────────────────────────────────────────
-  const totalHours = active.reduce((sum, a) => {
-    return sum + (new Date(a.end_time) - new Date(a.start_time)) / 3600000;
-  }, 0);
-
-  document.getElementById('statTotal').textContent     = total;
-  document.getElementById('statToday').textContent     = today;
-  document.getElementById('statUpcoming').textContent  = upcoming;
-  document.getElementById('statResources').textContent = resources.length;
-  document.getElementById('statHours').textContent     = totalHours.toFixed(1) + 'h';
+function renderDashboard(stats) {
+  document.getElementById('statTotal').textContent     = stats.total;
+  document.getElementById('statToday').textContent     = stats.today;
+  document.getElementById('statUpcoming').textContent  = stats.upcoming;
+  document.getElementById('statResources').textContent = stats.resource_count;
+  document.getElementById('statHours').textContent     = stats.total_hours + 'h';
 
   // ── Per-resource utilization ─────────────────────────────
-  const hoursMap = {};
-  resources.forEach(r => {
-    hoursMap[r.id] = { name: r.name, color: r.color, hours: 0 };
-  });
-  active.forEach(a => {
-    if (hoursMap[a.resource_id]) {
-      hoursMap[a.resource_id].hours += (new Date(a.end_time) - new Date(a.start_time)) / 3600000;
-    }
-  });
-  const allUtil = Object.values(hoursMap).sort((a, b) => b.hours - a.hours);
-  const maxHours = allUtil.length ? allUtil[0].hours : 0;
-
-  const top5    = allUtil.slice(0, 5);
-  const bottom5 = [...allUtil].sort((a, b) => a.hours - b.hours).slice(0, 5);
-
+  const allUtil  = stats.utilization || [];
+  const maxHours = allUtil.length ? allUtil[0].hours : 0;  // already sorted DESC from API
+  const top5     = allUtil.slice(0, 5);
+  const bottom5  = [...allUtil].sort((a, b) => a.hours - b.hours).slice(0, 5);
   renderUtilBars('top5Chart',    top5,    maxHours);
   renderUtilBars('bottom5Chart', bottom5, maxHours);
 
   // ── Weekly chart ─────────────────────────────────────────
-  const weekDays = [];
-  for (let i = 6; i >= 0; i--) {
-    const dS = new Date(todayS.getTime() - i * 86400000);
-    const dE = new Date(dS.getTime() + 86400000);
-    const count = active.filter(a => {
-      const s = new Date(a.start_time);
-      return s >= dS && s < dE;
-    }).length;
-    const label = dS.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    weekDays.push({ label, count });
-  }
-  renderWeeklyChart(weekDays);
+  renderWeeklyChart(stats.weekly || []);
 
   // ── Recent bookings ──────────────────────────────────────
-  const recent = [...appointments]
-    .filter(a => a.status !== 'cancelled')
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 8);
-
-  const tbody = document.getElementById('recentTable');
+  const recent = stats.recent || [];
+  const tbody  = document.getElementById('recentTable');
   tbody.innerHTML = recent.map(a => `
     <tr>
       <td>${a.title}</td>
@@ -1401,29 +1397,23 @@ function renderResourceFilter() {
   });
 }
 
-function renderApptTable(filter = {}) {
-  let rows = [...appointments];
+function renderApptTable(res) {
+  const { total, page, limit, pages: totalPages, data } = res;
+  const tbody   = document.getElementById('apptTable');
+  const empty   = document.getElementById('apptEmpty');
+  const pager   = document.getElementById('apptPager');
+  const meta    = document.getElementById('apptMeta');
+  const pagesEl = document.getElementById('apptPages');
 
-  const q   = (filter.q   || document.getElementById('apptSearch').value.trim()).toLowerCase();
-  const rid = (filter.rid !== undefined ? filter.rid : document.getElementById('apptFilterResource').value);
-  const st  = (filter.st  !== undefined ? filter.st  : document.getElementById('apptFilterStatus').value);
-
-  if (q)   rows = rows.filter(a => a.title?.toLowerCase().includes(q) || a.booked_by_name?.toLowerCase().includes(q));
-  if (rid) rows = rows.filter(a => String(a.resource_id) === String(rid));
-  if (st)  rows = rows.filter(a => a.status === st);
-
-  rows.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
-
-  const tbody = document.getElementById('apptTable');
-  const empty = document.getElementById('apptEmpty');
-
-  if (!rows.length) {
-    tbody.innerHTML = '';
+  if (!data.length) {
+    tbody.innerHTML     = '';
     empty.style.display = '';
+    pager.style.display = 'none';
     return;
   }
+
   empty.style.display = 'none';
-  tbody.innerHTML = rows.map(a => `
+  tbody.innerHTML = data.map(a => `
     <tr>
       <td style="color:var(--text-muted)">${a.id}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.title}</td>
@@ -1445,27 +1435,67 @@ function renderApptTable(filter = {}) {
       </td>
     </tr>
   `).join('');
+
+  // Pagination bar
+  const from = (page - 1) * limit + 1;
+  const to   = Math.min(page * limit, total);
+  meta.textContent = `Showing ${from}–${to} of ${total}`;
+
+  const btns  = [];
+  const delta = 2;
+  let start = Math.max(1, page - delta);
+  let end   = Math.min(totalPages, page + delta);
+  btns.push(`<button class="pager-btn" onclick="gotoApptPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>‹</button>`);
+  if (start > 1) {
+    btns.push(`<button class="pager-btn" onclick="gotoApptPage(1)">1</button>`);
+    if (start > 2) btns.push(`<span style="padding:0 .25rem;color:var(--text-muted)">…</span>`);
+  }
+  for (let i = start; i <= end; i++) {
+    btns.push(`<button class="pager-btn${i === page ? ' active' : ''}" onclick="gotoApptPage(${i})">${i}</button>`);
+  }
+  if (end < totalPages) {
+    if (end < totalPages - 1) btns.push(`<span style="padding:0 .25rem;color:var(--text-muted)">…</span>`);
+    btns.push(`<button class="pager-btn" onclick="gotoApptPage(${totalPages})">${totalPages}</button>`);
+  }
+  btns.push(`<button class="pager-btn" onclick="gotoApptPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>›</button>`);
+
+  pagesEl.innerHTML = btns.join('');
+  pager.style.display = total > limit ? 'flex' : 'none';
 }
 
-['apptSearch','apptFilterResource','apptFilterStatus'].forEach(id =>
-  document.getElementById(id)?.addEventListener('input', () => renderApptTable())
+function gotoApptPage(p) { apptPage = p; loadAppointments(); }
+
+// Filters: reset to page 1 and reload from server
+let apptSearchTimer;
+document.getElementById('apptSearch')?.addEventListener('input', () => {
+  clearTimeout(apptSearchTimer);
+  apptSearchTimer = setTimeout(() => { apptPage = 1; loadAppointments(); }, 300);
+});
+['apptFilterResource','apptFilterStatus','apptDateFrom','apptDateTo'].forEach(id =>
+  document.getElementById(id)?.addEventListener('input', () => { apptPage = 1; loadAppointments(); })
 );
+document.getElementById('apptLimit')?.addEventListener('change', e => {
+  apptLimit = parseInt(e.target.value);
+  apptPage  = 1;
+  loadAppointments();
+});
 
 // ── Edit appointment ─────────────────────────────────────
-function editAppt(id) {
-  const a = appointments.find(x => x.id === id);
-  if (!a) return;
-
-  document.getElementById('aId').value    = a.id;
-  document.getElementById('aTitle').value = a.title;
-  document.getElementById('aDesc').value  = a.description || '';
-  document.getElementById('aStart').value = toInputDt(a.start_time);
-  document.getElementById('aEnd').value   = toInputDt(a.end_time);
-  document.getElementById('aName').value  = a.booked_by_name;
-  document.getElementById('aEmail').value = a.booked_by_email;
-  document.getElementById('aStatus').value = a.status;
-
-  document.getElementById('apptModal').classList.add('open');
+async function editAppt(id) {
+  try {
+    const a = await api(`/appointments/${id}`);
+    document.getElementById('aId').value     = a.id;
+    document.getElementById('aTitle').value  = a.title;
+    document.getElementById('aDesc').value   = a.description || '';
+    document.getElementById('aStart').value  = toInputDt(a.start_time);
+    document.getElementById('aEnd').value    = toInputDt(a.end_time);
+    document.getElementById('aName').value   = a.booked_by_name;
+    document.getElementById('aEmail').value  = a.booked_by_email;
+    document.getElementById('aStatus').value = a.status;
+    document.getElementById('apptModal').classList.add('open');
+  } catch (err) {
+    toast(err.message || 'Could not load appointment', 'error');
+  }
 }
 
 document.getElementById('apptEditForm').addEventListener('submit', async (e) => {
@@ -1483,8 +1513,7 @@ document.getElementById('apptEditForm').addEventListener('submit', async (e) => 
   try {
     await api(`/appointments/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
     document.getElementById('apptModal').classList.remove('open');
-    await loadAppointments();
-    renderDashboard();
+    await Promise.all([loadAppointments(), loadDashboardStats()]);
     toast('Appointment updated', 'success');
   } catch (err) { toast(err.message, 'error'); }
 });
@@ -1496,8 +1525,7 @@ function deleteAppt(id, title) {
     `Delete "<strong>${title}</strong>"? This cannot be undone.`,
     async () => {
       await api(`/appointments/${id}`, { method: 'DELETE' });
-      await loadAppointments();
-      renderDashboard();
+      await Promise.all([loadAppointments(), loadDashboardStats()]);
       loadActivityLog();
       toast('Appointment deleted');
     }
@@ -2162,7 +2190,7 @@ async function loadUsers() {
   const pages = document.getElementById('usersPages');
 
   try {
-    const res = await api(`/users?limit=${usersLimit}&page=${usersPage}`);
+    const res = await api(`/users?limit=${usersLimit}&page=${usersPage}&search=${encodeURIComponent(usersSearch)}`);
     const { total, page, limit, pages: totalPages, data } = res;
 
     if (!data.length && page === 1) {
@@ -2256,7 +2284,7 @@ async function deleteUser(id, email, name) {
     toast(`User ${email} deleted${extra}`, 'success');
     loadUsers();
     loadAppointments();
-    renderDashboard();
+    loadDashboardStats();
   } catch (err) {
     toast(err.message || 'Could not delete user', 'error');
   }
@@ -2266,6 +2294,16 @@ document.getElementById('usersLimit')?.addEventListener('change', e => {
   usersLimit = parseInt(e.target.value);
   usersPage  = 1;
   loadUsers();
+});
+
+let userSearchTimer;
+document.getElementById('userSearch')?.addEventListener('input', e => {
+  clearTimeout(userSearchTimer);
+  userSearchTimer = setTimeout(() => {
+    usersSearch = e.target.value.trim();
+    usersPage   = 1;
+    loadUsers();
+  }, 300);
 });
 
 // ════════════════════════════════════════════════════════

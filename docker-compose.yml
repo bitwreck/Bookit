@@ -33,7 +33,7 @@ services:
         condition: service_healthy
     ports:
       - "${PORT:-9000}:3000"
-      - "${HTTPS_PORT:-4443}:4443"
+      - "${HTTPS_PORT:-9443}:3443"
     volumes:
       # Optional: mount a certs folder for HTTPS.
       # Place cert.pem + key.pem in ./certs/ and uncomment SSL_CERT/SSL_KEY below.

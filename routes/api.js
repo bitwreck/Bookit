@@ -716,8 +716,13 @@ router.get('/activity', ah(async (req, res) => {
   const offset = (page - 1) * limit;
   const action = VALID_ACTIONS.includes(req.query.action) ? req.query.action : null;
 
-  const where  = action ? 'WHERE action = ?' : '';
-  const wParam = action ? [action] : [];
+  const search = (req.query.search || '').trim();
+
+  const conditions = [];
+  const wParam     = [];
+  if (action) { conditions.push('action = ?');                          wParam.push(action); }
+  if (search) { conditions.push('(appointment_title LIKE ? OR actor LIKE ? OR resource_name LIKE ?)'); const s = `%${search}%`; wParam.push(s, s, s); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const [[{ total }]] = await db.execute(
     `SELECT COUNT(*) AS total FROM activity_log ${where}`, wParam

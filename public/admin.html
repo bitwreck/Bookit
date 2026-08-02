@@ -651,7 +651,15 @@ th.sortable.sort-active .sort-icon { opacity: 1; color: var(--primary); }
       <div class="page" id="page-activitylog">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
           <h1 style="font-size:1.4rem;font-weight:800">Activity Log</h1>
-          <div style="display:flex;align-items:center;gap:.6rem">
+          <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+            <input type="text" id="actLogSearch" placeholder="Search title, actor, resource…"
+                   class="form-control" style="width:220px;padding:.35rem .6rem;font-size:.85rem" />
+            <select id="actLogAction" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem">
+              <option value="">All actions</option>
+              <option value="created">Created</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="deleted">Deleted</option>
+            </select>
             <label style="font-size:.82rem;font-weight:600;color:var(--text-muted)">Per page</label>
             <select id="actLogLimit" class="form-control" style="width:auto;padding:.35rem .6rem;font-size:.85rem">
               <option value="25" selected>25</option>
@@ -1264,7 +1272,7 @@ function showPage(name) {
   document.querySelector(`.nav-item[data-page="${name}"]`)?.classList.add('active');
   if (name === 'dashboard')    { loadDashboardStats(); startDashRefresh(); } else { stopDashRefresh(); }
   if (name === 'appointments') { apptPage = 1; loadAppointments(); }
-  if (name === 'activitylog')  { actLogPage = 1; loadActivityLog(); }
+  if (name === 'activitylog')  { actLogPage = 1; actLogAction = ''; actLogSearch = ''; document.getElementById('actLogAction').value = ''; document.getElementById('actLogSearch').value = ''; loadActivityLog(); }
   if (name === 'users')        { usersPage = 1; loadUsers(); }
   if (name === 'settings')     { loadSettings(); }
 }
@@ -2236,8 +2244,10 @@ document.getElementById('okConfirm').addEventListener('click', async () => {
 // ════════════════════════════════════════════════════════
 // Activity Log
 // ════════════════════════════════════════════════════════
-let actLogPage  = 1;
-let actLogLimit = 25;
+let actLogPage   = 1;
+let actLogLimit  = 25;
+let actLogAction = '';
+let actLogSearch = '';
 
 const ACT_LABELS = {
   created:   { label: 'Created',   cls: 'act-created'   },
@@ -2253,7 +2263,10 @@ async function loadActivityLog() {
   const pages  = document.getElementById('actLogPages');
 
   try {
-    const res = await api(`/activity?limit=${actLogLimit}&page=${actLogPage}`);
+    const params = new URLSearchParams({ limit: actLogLimit, page: actLogPage });
+    if (actLogAction) params.set('action', actLogAction);
+    if (actLogSearch) params.set('search', actLogSearch);
+    const res = await api(`/activity?${params}`);
     const { total, page, limit, pages: totalPages, data } = res;
 
     if (!data.length && page === 1) {
@@ -2327,6 +2340,22 @@ document.getElementById('actLogLimit')?.addEventListener('change', e => {
   actLogLimit = parseInt(e.target.value);
   actLogPage  = 1;
   loadActivityLog();
+});
+
+document.getElementById('actLogAction')?.addEventListener('change', e => {
+  actLogAction = e.target.value;
+  actLogPage   = 1;
+  loadActivityLog();
+});
+
+let actLogSearchTimer;
+document.getElementById('actLogSearch')?.addEventListener('input', e => {
+  clearTimeout(actLogSearchTimer);
+  actLogSearchTimer = setTimeout(() => {
+    actLogSearch = e.target.value.trim();
+    actLogPage   = 1;
+    loadActivityLog();
+  }, 350);
 });
 
 // ════════════════════════════════════════════════════════

@@ -3,7 +3,7 @@ const express        = require('express');
 const bcrypt         = require('bcryptjs');
 const jwt            = require('jsonwebtoken');
 const crypto         = require('crypto');
-const ldap           = require('ldapjs');
+const { Client: LdapClient } = require('ldapts');
 const rateLimit      = require('express-rate-limit');
 const db             = require('../database');
 const requireAdmin   = require('../middleware/auth');
@@ -192,62 +192,29 @@ async function getLDAPConfig() {
   return cfg;
 }
 
-/** Promisify ldapjs client.bind */
-function ldapBind(client, dn, password) {
-  return new Promise((resolve, reject) =>
-    client.bind(dn, password, err => (err ? reject(err) : resolve()))
-  );
-}
-
-/** Promisify ldapjs client.search — resolves with array of entries */
-function ldapSearch(client, base, opts) {
-  return new Promise((resolve, reject) => {
-    client.search(base, opts, (err, res) => {
-      if (err) return reject(err);
-      const entries = [];
-      res.on('searchEntry', e => entries.push(e));
-      res.on('error',       reject);
-      res.on('end',         () => resolve(entries));
-    });
-  });
-}
-
 /**
  * Authenticate a user against the LDAP directory.
  * Returns { name, email, phone } on success, throws on failure.
+ * Uses ldapts — natively async, no callback wrappers needed.
  */
 async function ldapAuthenticate(email, password, ip = null) {
   const cfg = await getLDAPConfig();
   if (cfg.ldap_enabled !== 'true') throw new Error('LDAP is not enabled');
 
-  const client = ldap.createClient({
+  const client = new LdapClient({
     url:            cfg.ldap_url,
     timeout:        8000,
     connectTimeout: 8000,
-    reconnect:      false,           // don't retry — fail fast
     tlsOptions: {
-      rejectUnauthorized: false,  // allow self-signed certs
-      minVersion: 'TLSv1',        // permit older TLS versions some LDAP servers require
+      rejectUnauthorized: false,   // allow self-signed certs
+      minVersion:         'TLSv1', // permit older TLS versions some LDAP servers require
     },
   });
-
-  // Attach a persistent error handler to prevent Node from crashing on
-  // unhandled 'error' events emitted during ldapjs's reconnect backoff cycle
-  client.on('error', err => {
-    console.error('[LDAP] Client error:', err.message);
-  });
-
-  // Surface connection errors immediately
-  await new Promise((resolve, reject) => {
-    client.once('connect', resolve);
-    client.once('error',   reject);
-    setTimeout(resolve, 100);
-  }).catch(() => {});
 
   try {
     // Bind with service account to search the directory
     try {
-      await ldapBind(client, cfg.ldap_bind_dn, cfg.ldap_bind_pass);
+      await client.bind(cfg.ldap_bind_dn, cfg.ldap_bind_pass);
     } catch (err) {
       const detail = `Service account bind failed (url=${cfg.ldap_url} dn=${cfg.ldap_bind_dn}): ${err.message}`;
       console.error(`[LDAP] ${detail}`);
@@ -264,13 +231,13 @@ async function ldapAuthenticate(email, password, ip = null) {
     if (cfg.ldap_phone_attr) attrs.push(cfg.ldap_phone_attr);
 
     console.log(`[LDAP] Searching for user: ${email} (filter=${filter} base=${cfg.ldap_base_dn})`);
-    let entries;
+    let searchEntries;
     try {
-      entries = await ldapSearch(client, cfg.ldap_base_dn, {
+      ({ searchEntries } = await client.search(cfg.ldap_base_dn, {
         filter,
         scope:      'sub',
         attributes: attrs,
-      });
+      }));
     } catch (err) {
       const detail = `Search failed (base=${cfg.ldap_base_dn} filter=${filter}): ${err.message}`;
       console.error(`[LDAP] ${detail}`);
@@ -278,20 +245,19 @@ async function ldapAuthenticate(email, password, ip = null) {
       throw err;
     }
 
-    if (!entries.length) {
+    if (!searchEntries.length) {
       const detail = `No directory entry found (filter=${filter} base=${cfg.ldap_base_dn})`;
       console.warn(`[LDAP] ${detail}`);
       logLdapEvent('user_not_found', email, detail, ip);
       throw new Error('No matching user found in directory');
     }
 
-    const entry  = entries[0];
-    const obj    = entry.pojo || entry.object || {};   // v3 uses pojo; v2 fallback
-    const userDN = entry.dn ? entry.dn.toString() : entry.objectName;
+    const entry  = searchEntries[0];
+    const userDN = entry.dn; // ldapts returns dn as a plain string
 
     // Re-bind as the user to verify their password
     try {
-      await ldapBind(client, userDN, password);
+      await client.bind(userDN, password);
     } catch (err) {
       const detail = `Invalid credentials for dn=${userDN}: ${err.message}`;
       console.warn(`[LDAP] ${detail}`);
@@ -301,13 +267,16 @@ async function ldapAuthenticate(email, password, ip = null) {
 
     console.log(`[LDAP] Authentication successful for: ${email}`);
     logLdapEvent('success', email, `Authenticated via ${cfg.ldap_url}`, ip);
+
+    // ldapts returns attributes directly on the entry object (string or string[])
+    const attr = key => { const v = entry[key]; return Array.isArray(v) ? v[0] : (v || null); };
     return {
-      name:  obj[cfg.ldap_name_attr]  || email,
-      email: (obj[cfg.ldap_email_attr] || email).toLowerCase(),
-      phone: cfg.ldap_phone_attr ? (obj[cfg.ldap_phone_attr] || null) : null,
+      name:  attr(cfg.ldap_name_attr)  || email,
+      email: (attr(cfg.ldap_email_attr) || email).toLowerCase(),
+      phone: cfg.ldap_phone_attr ? attr(cfg.ldap_phone_attr) : null,
     };
   } finally {
-    client.unbind();
+    await client.unbind().catch(() => {});
   }
 }
 
@@ -1327,17 +1296,14 @@ router.post('/auth/ldap-test', requireAdmin, ah(async (req, res) => {
     return res.status(400).json({ error: 'url, bind_dn, and base_dn are required' });
 
   const ip = getClientIP(req);
-  const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 8000, reconnect: false, tlsOptions: { rejectUnauthorized: false, minVersion: 'TLSv1' } });
-  client.on('error', err => console.error('[LDAP] Test client error:', err.message));
+  const client = new LdapClient({ url, timeout: 8000, connectTimeout: 8000, tlsOptions: { rejectUnauthorized: false, minVersion: 'TLSv1' } });
   try {
-    await new Promise((resolve, reject) => {
-      client.bind(bind_dn, bind_pass || '', err => (err ? reject(err) : resolve()));
-    });
-    client.unbind();
+    await client.bind(bind_dn, bind_pass || '');
+    await client.unbind();
     logLdapEvent('success', null, `Admin connection test passed (url=${url} dn=${bind_dn})`, ip);
     res.json({ ok: true, message: 'Connection and bind successful.' });
   } catch (err) {
-    try { client.unbind(); } catch {}
+    await client.unbind().catch(() => {});
     logLdapEvent('bind_failed', null, `Admin connection test failed (url=${url} dn=${bind_dn}): ${err.message}`, ip);
     res.status(400).json({ error: err.message || 'LDAP bind failed.' });
   }

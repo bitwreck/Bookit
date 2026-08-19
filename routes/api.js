@@ -286,8 +286,8 @@ async function ldapAuthenticate(email, password, ip = null) {
     }
 
     const entry  = entries[0];
-    const obj    = entry.object || {};
-    const userDN = entry.objectName;
+    const obj    = entry.pojo || entry.object || {};   // v3 uses pojo; v2 fallback
+    const userDN = entry.dn ? entry.dn.toString() : entry.objectName;
 
     // Re-bind as the user to verify their password
     try {

@@ -39,32 +39,8 @@ async function sendEmail({ to, subject, text, html }) {
   }
 }
 
-// ── SMS ──────────────────────────────────────────────────────
-async function sendSMS(to, body) {
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    console.warn('[notifications] Twilio not configured — skipping SMS to', to);
-    return false;
-  }
-  try {
-    // Require lazily so missing the package doesn't crash the server
-    const twilio = require('twilio');
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    await client.messages.create({
-      body,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to,
-    });
-    return true;
-  } catch (err) {
-    console.error('[notifications] SMS failed:', err.message);
-    return false;
-  }
-}
-
 // ── Cancellation code dispatch ───────────────────────────────
 async function sendCancellationCode(appt, code) {
-  const results = { email: false, sms: false };
-
   const subject = `Cancellation code for "${appt.title}"`;
   const text =
     `Your BookIt cancellation code is: ${code}\n\n` +
@@ -86,21 +62,16 @@ async function sendCancellationCode(appt, code) {
     </div>
   `;
 
-  results.email = await sendEmail({ to: appt.booked_by_email, subject, text, html });
+  const sent = await sendEmail({ to: appt.booked_by_email, subject, text, html });
 
-  if (appt.booked_by_phone) {
-    const smsBody = `BookIt: Your cancellation code for "${appt.title}" is ${code}. Valid for 15 min.`;
-    results.sms = await sendSMS(appt.booked_by_phone, smsBody);
-  }
-
-  // If neither channel delivered, log to console so the code is usable during development
-  if (!results.email && !results.sms) {
-    console.log(`\n  ⚠️  No delivery channel configured.`);
+  // If email not delivered, log to console so the code is usable during development
+  if (!sent) {
+    console.log(`\n  ⚠️  SMTP not configured.`);
     console.log(`  📋 Cancellation code for "${appt.title}": ${code}`);
-    console.log(`     (Configure SMTP_HOST or Twilio in .env to send real messages)\n`);
+    console.log(`     (Configure SMTP_HOST in .env to send real messages)\n`);
   }
 
-  return results;
+  return { email: sent };
 }
 
 // ── Booking confirmation ─────────────────────────────────────
@@ -217,4 +188,4 @@ async function sendPasswordReset(user, resetUrl) {
   return sendEmail({ to: user.email, subject, text, html });
 }
 
-module.exports = { sendEmail, sendSMS, sendCancellationCode, sendBookingConfirmation, sendCancellationConfirmation, sendPasswordReset };
+module.exports = { sendEmail, sendCancellationCode, sendBookingConfirmation, sendCancellationConfirmation, sendPasswordReset };

@@ -56,8 +56,6 @@ Key settings:
   SMTP_*           Fill in to enable email notifications. Leave SMTP_HOST
                    blank to disable.
 
-  TWILIO_*         Fill in to enable SMS notifications. Leave
-                   TWILIO_ACCOUNT_SID blank to disable.
 
 
 ------------------------------------------------------------
@@ -288,7 +286,7 @@ Booking a resource
      and the Submit button is disabled until you choose a
      different slot or time.
   4. Click "Confirm Booking". A confirmation is shown and,
-     if configured, an email/SMS notification is sent.
+     if configured, an email notification is sent.
 
 Cancelling a booking
   If "Require cancellation code" is enabled in Settings, a
@@ -366,8 +364,8 @@ LDAP Log
   email, detail message, and IP address. Paginated.
 
 Settings
-  Central configuration page covering email (SMTP), SMS
-  (Twilio), cancellation codes, admin password change,
+  Central configuration page covering email (SMTP),
+  cancellation codes, admin password change,
   LDAP authentication, and Database Management.
 
 

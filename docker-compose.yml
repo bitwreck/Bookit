@@ -59,11 +59,6 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
       SMTP_FROM_NAME:  ${SMTP_FROM_NAME:-BookIt}
 
-      # SMS (Twilio) — leave TWILIO_ACCOUNT_SID unset to disable SMS
-      TWILIO_ACCOUNT_SID:  ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN:   ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
-
       # HTTPS — uncomment and populate SSL_CERT/SSL_KEY to enable
       HTTPS_PORT: ${HTTPS_PORT:-3443}
       SSL_CERT:   ${SSL_CERT:-}
